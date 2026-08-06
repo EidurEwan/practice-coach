@@ -1,0 +1,11 @@
+{
+  "name": "practice-coach",
+  "version": "1.0.0",
+  "description": "Skill Practice Scheduler — tells you what to practice and when, based on skill-acquisition and memory research.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node serve.js",
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

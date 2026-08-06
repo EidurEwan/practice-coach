@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f5f1e8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16140f" media="(prefers-color-scheme: dark)">
+<title>Practice Coach</title>
+<link rel="stylesheet" href="./styles.css">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='3' fill='%23f5f1e8'/><rect x='5' y='9' width='22' height='14' rx='2' fill='none' stroke='%2334527a' stroke-width='2'/><path d='M9 15h14M9 19h9' stroke='%2334527a' stroke-width='2' stroke-linecap='round'/></svg>">
+<script>
+  // Applied before first paint so a chosen theme never flashes the other one.
+  try {
+    var saved = JSON.parse(localStorage.getItem('practice-coach:v1') || '{}');
+    var theme = saved && saved.settings && saved.settings.theme;
+    if (theme === 'light' || theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  } catch (e) { /* first run, or storage unavailable */ }
+</script>
+</head>
+<body>
+  <div class="save-alert" id="save-alert" role="alert" hidden>
+    <div class="shell">
+      <strong>Your last change was not saved.</strong>
+      Browser storage is full or blocked, so reviews you record now will be lost when you
+      close this tab. Export your data from Skills → Settings before carrying on.
+    </div>
+  </div>
+  <p class="sr-only" id="live" role="status" aria-live="polite"></p>
+  <div class="layout">
+    <div class="sidebar" id="sidebar">
+      <header class="masthead" id="masthead">
+        <div class="shell inner">
+          <h1>Practice Coach</h1>
+          <span class="stamped-date" id="stamped-date"></span>
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch colour theme"></button>
+        </div>
+      </header>
+      <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+    </div>
+    <main class="shell" id="view"></main>
+  </div>
+  <script type="module" src="./src/ui/app.js"></script>
+</body>
+</html>

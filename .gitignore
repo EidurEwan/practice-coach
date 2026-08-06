@@ -1,0 +1,13 @@
+# Editor / tooling
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node (the app itself has no dependencies, but keep this honest)
+node_modules/
+npm-debug.log*
+
+# Design-tool cache
+.impeccable/
