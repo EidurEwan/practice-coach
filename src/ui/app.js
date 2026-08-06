@@ -297,6 +297,10 @@ const app = {
     this.ui.horizon = id;
     render();
   },
+  /** Re-render without changing state; for views that patch in place. */
+  rerender() {
+    render();
+  },
   setSkillFilter(skillId) {
     this.ui.skillFilter = skillId;
     const name = this.store.state.skills.find((s) => s.id === skillId)?.name;

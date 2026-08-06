@@ -5,14 +5,17 @@
 :root {
   color-scheme: light;
 
-  --bg: #f6f6f8;
-  --surface: #ffffff;
-  --sunken: #f0f0f4;
-  --hairline: #e5e5ea;
+  /* Nothing large is pure white: #fff over a whole screen is what makes a
+     light UI tiring to read for long. Everything is warmed a touch and the
+     ground sits further from the card so depth survives the lower contrast. */
+  --bg: #edecea;
+  --surface: #fbfbf9;
+  --sunken: #e4e3df;
+  --hairline: #dbdad5;
 
   --text: #1c1c1e;
   --text-2: #55555f;
-  --text-3: #6e6e79; /* still meets 4.5:1 on both surface and ground */
+  --text-3: #66666f; /* darkened with the ground: 4.7:1 on bg, 5.4:1 on card */
 
   --accent: #3b62d9;
   --accent-hover: #2f51bd;
@@ -189,7 +192,9 @@ body {
   display: flex;
   align-items: center;
   gap: var(--s-md);
-  padding: var(--s-lg) 0 var(--s-md);
+  /* Horizontal padding must be restated: this rule outranks .shell, and a bare
+     0 here pins the title and the theme button to the screen edges. */
+  padding: var(--s-lg) var(--s-lg) var(--s-md);
 }
 .masthead h1 {
   font-family: var(--sans-display);
@@ -783,7 +788,7 @@ pre.card-out {
 details > summary { cursor: pointer; }
 
 /* ------------------------------------------------------------ onboarding */
-.onboard { min-height: calc(100dvh - var(--s-xl)); display: flex; flex-direction: column; }
+.onboard { min-height: 100dvh; display: flex; flex-direction: column; }
 .onboard .ob-top { display: flex; align-items: center; gap: var(--s-md); padding: var(--s-lg) 0; }
 .onboard .ob-body { flex: 1; padding-bottom: var(--s-lg); }
 .onboard .ob-foot {
@@ -823,6 +828,10 @@ details > summary { cursor: pointer; }
 .ob-slip .ob-slip-note { margin-top: var(--s-md); font-size: var(--t-footnote); color: var(--text-3); }
 
 .ob-choice { display: grid; gap: var(--s-sm); margin-bottom: var(--s-md); }
+/* Five options in two columns keeps the genre step inside one phone screen. */
+.ob-choice.cols { grid-template-columns: 1fr 1fr; }
+.ob-choice.cols button { padding: var(--s-md); }
+.ob-choice.cols button .d { font-size: var(--t-caption); }
 .ob-choice button {
   appearance: none;
   font: inherit;
@@ -1011,6 +1020,9 @@ details > summary { cursor: pointer; }
 
 /* Onboarding has no navigation, so it gets no side panel or divider either —
    just one centred column at every width. */
+/* No tab bar on these screens, so the gutter reserved for it must go — left in
+   place it makes every onboarding step exactly that much too tall to fit. */
+body.is-onboarding { padding-bottom: 0; }
 body.is-onboarding .layout {
   display: block;
   max-width: 44rem;

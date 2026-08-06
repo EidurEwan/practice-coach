@@ -9,12 +9,13 @@ import { SCORE_OPTIONS, verdictFor } from '../../engine/diagnostic.js';
 
 export const ONBOARD_STEPS = ['welcome', 'skill', 'context', 'diagnostic', 'topic', 'done'];
 
+// Kept short so five choices fit a phone screen without scrolling.
 const GENRE_BLURB = {
-  language: 'A spoken or written language',
-  reasoning: 'Maths, physics, logic, programming — anything where you pick a method',
-  physical: 'Sport, an instrument, dance, any motor skill',
-  conceptual: 'Science, history, systems — subjects you have to understand',
-  memorization: 'Vocab, formulas, anatomy, dates — things you just have to know',
+  language: 'Spoken or written',
+  reasoning: 'Maths, code, logic',
+  physical: 'Sport, instrument, motor',
+  conceptual: 'Science, history, systems',
+  memorization: 'Vocab, facts, formulas',
 };
 
 export function onboardingView(app) {
@@ -132,7 +133,7 @@ function stepWelcome(app) {
 
 function stepSkill(app, ob) {
   const hintEl = h('div', { class: 'small faint', style: { marginTop: 'var(--s-xs)' } });
-  const choiceWrap = h('div', { class: 'ob-choice' });
+  const choiceWrap = h('div', { class: 'ob-choice cols' });
   const physicalWrap = h('div');
   const methodWrap = h('div');
   let renderedGenre = null;
@@ -175,7 +176,7 @@ function stepSkill(app, ob) {
     h('div', { class: 'ob-kicker' }, 'Step 1 of 4'),
     h('h2', { class: 'page-title' }, 'What are you learning?'),
     h('p', { class: 'ob-lede' },
-      'The kind of skill decides everything else — the interval curve, whether reviews get interleaved, and how each session is structured.'),
+      'The kind of skill decides the interval curve, the interleaving, and how sessions are run.'),
 
     h('label', { class: 'field' },
       h('span', { class: 'lbl' }, 'Skill name'),
@@ -214,12 +215,12 @@ function stepSkill(app, ob) {
 
 function physicalField(app, ob, sync) {
   const options = [
-    { id: 'closed', name: 'Closed — self-paced', desc: 'Scales, a free throw, a routine. You start the movement.' },
-    { id: 'open', name: 'Open — reactive', desc: 'A tennis return, sparring, improv. Something else starts it.' },
+    { id: 'closed', name: 'Closed', desc: 'Self-paced — scales, free throws' },
+    { id: 'open', name: 'Open', desc: 'Reactive — tennis, sparring' },
   ];
   return h('div', null,
     h('span', { class: 'lbl', style: { display: 'block', marginTop: 'var(--s-sm)' } }, 'Which kind?'),
-    h('div', { class: 'ob-choice' }, options.map((o) => h('button', {
+    h('div', { class: 'ob-choice cols' }, options.map((o) => h('button', {
       type: 'button',
       'aria-pressed': String(ob.physicalType === o.id),
       onClick: () => { app.setOnboard({ physicalType: o.id }); sync(); },
@@ -227,19 +228,17 @@ function physicalField(app, ob, sync) {
       h('span', { class: 'n' }, o.name),
       h('span', { class: 'd' }, o.desc),
     ))),
-    h('p', { class: 'why' },
-      'It matters: blocked repetition builds a closed skill fast, but actively hurts an open one, where reacting to variation is the skill.'),
   );
 }
 
+/** Folded away: useful reassurance, but it must not push the button off-screen. */
 function methodPreview(genre, physicalType) {
   const stack = methodStack(genre, physicalType || 'closed');
-  return h('div', { class: 'msg info' },
-    h('span', { class: 'ico' }, '→'),
-    h('span', null,
-      h('b', null, 'Your sessions will use: '),
+  return h('details', { class: 'why' },
+    h('summary', null, 'What your sessions will look like'),
+    h('div', { class: 'why-body' },
       h('ul', { class: 'method-stack' }, stack.primary.map((m) => h('li', null, m))),
-      h('div', { class: 'why' }, stack.why),
+      h('p', null, stack.why),
     ),
   );
 }
@@ -293,7 +292,8 @@ function stepDiagnostic(app, ob) {
       : null);
   }
 
-  const rows = ob.diagnostic.map((row, i) => {
+  const visible = ob.diagnosticRows ?? 1;
+  const rows = ob.diagnostic.slice(0, visible).map((row, i) => {
     const buttons = SCORE_OPTIONS.map((opt) => h('button', {
       type: 'button',
       class: 'btn tiny',
@@ -337,11 +337,14 @@ function stepDiagnostic(app, ob) {
       h('div', { class: 'ob-kicker' }, 'Step 3 of 4 — optional'),
       h('h2', { class: 'page-title' }, 'How fast do you forget?'),
       h('p', { class: 'ob-lede' },
-        'Think of two things you learned recently. Try to recall each one right now, before checking, then score how much actually came back. This is a real retrieval attempt, not a self-assessment — it back-solves your memory stability and scales every interval to it.'),
+        'Think of something you learned recently. Try to recall it now, before checking, then score how much came back — a real attempt, not a guess at how well you know it.'),
       rows,
+      visible < ob.diagnostic.length && h('button', {
+        class: 'btn tiny',
+        type: 'button',
+        onClick: () => { app.setOnboard({ diagnosticRows: visible + 1 }); app.rerender(); },
+      }, '+ Add another (more accurate)'),
       calWrap,
-      h('p', { class: 'why' },
-        'Skip this and everyone starts on the default curve, which you can recalibrate later.'),
     ),
     action: h('button', { class: 'btn primary', onClick: () => app.onboardNext() }, 'Continue'),
   };

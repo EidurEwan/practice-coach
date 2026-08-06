@@ -6,13 +6,13 @@ colors:
   accent-hover: "#2f51bd"
   accent-wash: "#eaeeff"
   on-solid: "#ffffff"
-  bg: "#f6f6f8"
-  surface: "#ffffff"
-  surface-sunken: "#f0f0f4"
+  bg: "#edecea"
+  surface: "#fbfbf9"
+  surface-sunken: "#e4e3df"
   text: "#1c1c1e"
   text-secondary: "#55555f"
-  text-tertiary: "#6e6e79"
-  hairline: "#e5e5ea"
+  text-tertiary: "#66666f"
+  hairline: "#dbdad5"
   overdue: "#b23a32"
   overdue-wash: "#fdecea"
   attention: "#8a5c07"
@@ -110,7 +110,7 @@ leaves one obvious next action.
 
 This is a deliberate, full replacement of an earlier "library date-due slip" concept,
 which tested as too austere, too dense, and too flat in hierarchy. The paper metaphor is
-gone. What replaces it is soft, generous, and modern: near-white ground, white cards
+gone. What replaces it is soft, generous, and modern: a soft off-white ground, warmer near-white cards
 floating on it with very soft shadows, one accent used sparingly, and typography doing
 almost all of the hierarchical work.
 
@@ -119,7 +119,7 @@ explain, and the previous version explained all of it at once. Now the screen st
 to do; the reasoning is one tap away and never competes with the action.
 
 **Key Characteristics:**
-- Near-white ground, white cards, very soft shadows — no hairline borders on cards
+- Soft off-white ground and cards — never pure white — with very soft shadows
 - One accent, spent only on the primary action and the active state
 - Large clear type steps; hierarchy comes from size and weight, never from boxes
 - Generous padding and breathing room; density is low by choice
@@ -149,10 +149,11 @@ mode. They give the agenda, filters and skill lists scannable identity at a glan
 ### Neutral
 - **Ink** (`#1c1c1e`): primary text.
 - **Secondary Ink** (`#55555f`): supporting lines and descriptions.
-- **Tertiary Ink** (`#6e6e79`): metadata, timestamps, placeholders.
-- **Ground** (`#f6f6f8`) / **Surface** (`#ffffff`): page behind, cards in front.
-- **Sunken** (`#f0f0f4`): inset fills — inputs, segmented controls, quiet buttons.
-- **Hairline** (`#e5e5ea`): list separators only. Never a card border.
+- **Tertiary Ink** (`#66666f`): metadata, timestamps, placeholders.
+- **Ground** (`#edecea`) / **Surface** (`#fbfbf9`): page behind, cards in front. Neither is
+  pure white — a full screen of `#fff` is what makes a light UI tiring to read.
+- **Sunken** (`#e4e3df`): inset fills — inputs, segmented controls, quiet buttons.
+- **Hairline** (`#dbdad5`): list separators only. Never a card border.
 
 ### Named Rules
 **The Single Accent Rule.** One accent, one job: the thing to do next. If two things on a
