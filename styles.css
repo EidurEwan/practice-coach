@@ -43,6 +43,7 @@
   --sans-display: "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
   /* Seven steps. Every font-size in this file resolves to one of these. */
+  --t-hero: 3rem; /* the day's count, and nothing else */
   --t-display: 1.75rem;
   --t-title: 1.3125rem;
   --t-headline: 1.0625rem;
@@ -52,9 +53,9 @@
   --t-caption: 0.75rem;
   --t-input: 1rem; /* 16px exactly: below this, iOS zooms the page on focus */
 
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
   --r-pill: 999px;
 
   --s-xs: 4px;
@@ -68,6 +69,8 @@
   --shadow-rest: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.05);
   --shadow-raised: 0 2px 4px rgb(0 0 0 / 0.05), 0 12px 28px rgb(0 0 0 / 0.09);
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Lively without bouncing: a hard ease-out-quint, no overshoot. */
+  --ease-lively: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -314,7 +317,7 @@ h3 { font-size: var(--t-headline); font-weight: 600; letter-spacing: -0.011em; }
   transition: background 0.15s var(--ease), color 0.15s var(--ease), transform 0.1s var(--ease);
 }
 .btn:hover:not(:disabled) { background: var(--hairline); }
-.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:active:not(:disabled) { transform: scale(0.96); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.primary { background: var(--accent); color: var(--on-solid); font-weight: 600; }
 .btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
@@ -366,13 +369,39 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   padding: var(--s-lg);
 }
 
+/* The day's size, said with a numeral rather than a sentence. */
+.tally-row { display: flex; align-items: center; gap: var(--s-md); margin-top: var(--s-sm); }
+.tally-n {
+  font-family: var(--sans-display);
+  font-size: var(--t-hero);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.tally-l { font-size: var(--t-body); color: var(--text-2); line-height: 1.3; }
+.tally-l em { display: block; font-style: normal; font-size: var(--t-footnote); color: var(--text-3); }
+
 /* ---------------------------------------------------------- practice item */
 .slip { display: grid; gap: var(--s-md); margin-top: var(--s-lg); }
 .slip-row {
+  position: relative;
   background: var(--surface);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-rest);
   padding: var(--s-lg);
+  overflow: hidden;
+}
+/* A band along the top, not the side: the card wears its skill's colour
+   without turning into the coloured-left-border card everyone ships. */
+.slip-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--skill, var(--accent));
+  opacity: 0.85;
 }
 /* What to do first should look like it. */
 .slip-row.is-first { padding: var(--s-xl) var(--s-lg); }
@@ -535,10 +564,10 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .progress-dots i.current { background: var(--text-2); }
 
 @keyframes settle {
-  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
   to { opacity: 1; transform: none; }
 }
-.pressed { animation: settle 0.32s var(--ease); }
+.pressed { animation: settle 0.42s var(--ease-lively); }
 @media (prefers-reduced-motion: reduce) {
   .pressed { animation: none; }
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
@@ -755,10 +784,10 @@ table.items tr:last-child td { border-bottom: 0; }
   display: grid;
   place-items: center;
   font-size: var(--t-title);
-  animation: rise 0.45s var(--ease);
+  animation: rise 0.55s var(--ease-lively);
 }
 @keyframes rise {
-  from { opacity: 0; transform: scale(0.8); }
+  from { opacity: 0; transform: scale(0.55) rotate(-12deg); }
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) { .done-mark { animation: none; } }
@@ -848,7 +877,7 @@ details > summary { cursor: pointer; }
 }
 .ob-choice button:hover { background: var(--accent-wash); }
 .ob-choice button[aria-pressed="true"] { background: var(--accent-wash); box-shadow: 0 0 0 2px var(--accent); }
-.ob-choice button .n { font-weight: 600; display: block; }
+.ob-choice button .n { font-weight: 600; display: flex; align-items: center; gap: var(--s-sm); }
 .ob-choice button .d { font-size: var(--t-footnote); color: var(--text-2); display: block; margin-top: 2px; }
 
 .scores { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-sm); }

@@ -30,7 +30,7 @@ export function todayView(app) {
   if (store.state.skills.length === 0) {
     return h('div', { class: 'empty' },
       h('h3', null, 'No skills yet'),
-      h('p', null, 'Add a skill to start. Practice Coach designs the schedule, method and encoding around it — it does not teach the skill itself.'),
+      h('p', null, 'Add a skill and it builds the schedule around it.'),
       h('button', { class: 'btn primary', onClick: () => app.go('skills') }, 'Add your first skill'),
     );
   }
@@ -53,7 +53,7 @@ export function todayView(app) {
     noItems
       ? h('div', { class: 'empty' },
           h('h3', null, 'Ready when you are'),
-          h('p', null, 'You have a skill set up. Log the first thing you studied and it gets a review date, a method, and a place in the rotation.'),
+          h('p', null, 'Log the first thing you studied.'),
           h('button', { class: 'btn primary', onClick: () => app.go('log') }, 'Log what you studied'),
         )
       : session.blocks.length === 0
@@ -87,10 +87,16 @@ function sessionHeader(app, session, done) {
     // The one display-scale moment on the screen.
     h('h1', { class: 'page-title', style: { marginTop: 'var(--s-xs)' } },
       isToday ? "Today's practice" : humanDate(app.ui.date, app.todayISO)),
-    h('p', { class: 'lede', style: { marginTop: 'var(--s-xs)' } },
-      session.blocks.length === 0
-        ? done > 0 ? `${done} review${done === 1 ? '' : 's'} done. Nothing else due.` : 'Nothing due.'
-        : `${session.blocks.length} thing${session.blocks.length === 1 ? '' : 's'} to review${done > 0 ? `, ${done} already done` : ''}. Overdue first.`),
+    // A number carries this better than a sentence does.
+    session.blocks.length > 0 && h('div', { class: 'tally-row' },
+      h('span', { class: 'tally-n' }, String(session.blocks.length)),
+      h('span', { class: 'tally-l' },
+        session.blocks.length === 1 ? 'thing to review' : 'things to review',
+        done > 0 && h('em', null, `${done} done already`),
+      ),
+    ),
+    session.blocks.length === 0 && h('p', { class: 'lede', style: { marginTop: 'var(--s-xs)' } },
+      done > 0 ? `${done} done. Nothing else due.` : 'Nothing due.'),
 
     !isToday && h('div', { class: 'msg info', style: { marginTop: 'var(--s-sm)' } },
       h('span', { class: 'ico' }, '→'),
@@ -120,8 +126,8 @@ function doneCard(app, done) {
     h('h3', null, done > 0 ? 'That is the day done' : 'Nothing due today'),
     h('p', null,
       done > 0
-        ? `${done} review${done === 1 ? '' : 's'} logged. Stop here — extra reps on material that is not due work against the spacing effect.`
-        : 'Everything is spaced out where it should be.'),
+        ? `${done} logged. Stop here — extra reps work against the spacing.`
+        : 'Everything is spaced where it should be.'),
     next && h('p', { class: 'small faint' }, `Next review ${humanDate(next, app.ui.date)}.`),
     h('div', { class: 'row', style: { justifyContent: 'center' } },
       h('button', { class: 'btn primary', onClick: () => app.go('log') }, 'Log something new'),
@@ -204,7 +210,7 @@ function blockCard(app, block, index) {
             h('button', {
               class: index === 0 ? 'btn primary' : 'btn',
               onClick: () => app.startBlock(block.id),
-            }, block.kind === 'batch' ? `Start ${block.items.length} cards` : 'Start'),
+            }, block.kind === 'batch' ? `Start ${block.items.length} card${block.items.length === 1 ? '' : 's'}` : 'Start'),
           ),
 
       whyPanel(block),

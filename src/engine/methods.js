@@ -44,18 +44,18 @@ export function practiceMethod(item, skill, ctx = {}) {
         label: item.repetition === 0 ? 'Worked-example fading' : 'Interleaved retrieval',
         detail:
           item.repetition === 0
-            ? `Worked example -> guided attempt -> one independent problem on ${item.subSkill || item.title}.` +
-              (partner ? ` Finish with 1 question from ${partner} so it is never practised alone.` : '')
-            : `${format}: 3 unlabelled questions on ${item.subSkill || item.title}` +
-              (partner ? ` mixed with 2 from ${partner} — shuffled, so you have to identify the method first.` : ' — shuffle them so you must identify the method first.'),
+            ? `Worked example, then guided, then one on your own.` +
+              (partner ? ` Finish with 1 from ${partner}.` : '')
+            : `3 unlabelled questions on ${item.subSkill || item.title}` +
+              (partner ? `, mixed with 2 from ${partner} — shuffled, so you pick the method.` : ' — shuffled, so you pick the method.'),
       };
 
     case 'conceptual':
       return {
         label: 'Retrieval + elaboration',
         detail:
-          `Blind free recall of ${item.title}, then elaborative interrogation: why is each part true? ` +
-          (partner ? `Then map one link between ${item.title} and ${partner}.` : 'Then map it against a topic you already know.'),
+          `Free recall, then ask why each part is true. ` +
+          (partner ? `Link it to ${partner}.` : 'Link it to something you know.'),
       };
 
     case 'physical': {
@@ -63,16 +63,16 @@ export function practiceMethod(item, skill, ctx = {}) {
         return {
           label: 'Variable / reactive drill',
           detail:
-            `Randomize conditions from the start: vary tempo, angle, distance and feed order every rep of ${item.title}. ` +
-            'No two consecutive reps the same. Reactive cue, not self-paced.',
+            `Vary tempo, angle and feed every rep. ` +
+            'Never two the same in a row.',
         };
       }
       const blocked = item.blockedSessions < BLOCKED_SESSION_LIMIT;
       return {
         label: blocked ? 'Blocked practice' : 'Randomized practice',
         detail: blocked
-          ? `Groove the pattern: 3 sets of the same ${item.subSkill || item.title} rep, identical conditions. Session ${item.blockedSessions + 1} of ${BLOCKED_SESSION_LIMIT} blocked.`
-          : `Mix ${item.title} with other sub-skills in random order — never two of the same in a row. ${partner ? `Interleave with ${partner}.` : ''}`.trim(),
+          ? `3 sets, identical conditions. Blocked session ${item.blockedSessions + 1} of ${BLOCKED_SESSION_LIMIT}.`
+          : `Mix with other sub-skills, never two the same in a row.${partner ? ` With ${partner}.` : ''}`,
       };
     }
 
@@ -80,18 +80,17 @@ export function practiceMethod(item, skill, ctx = {}) {
       return {
         label: 'SRS + output',
         detail:
-          `${itemCount > 1 ? `${itemCount} due items: ` : ''}blind recall each card, then use every item you got right in one spoken or written sentence of your own. ` +
-          'Pair with 10 min of comprehensible input (listening/reading) where you can spot them in context.',
+          `${itemCount > 1 ? `${itemCount} cards. ` : ''}Recall each, then use the ones you got in a sentence.`,
       };
 
     case 'memorization':
       return {
         label: `SRS — ${format}`,
         detail:
-          `${itemCount > 1 ? `${itemCount} due items: ` : ''}cue first, answer from memory before revealing. ` +
+          `${itemCount > 1 ? `${itemCount} cards. ` : ''}Answer before revealing. ` +
           (item.encoding
-            ? `If one fails, re-run its encoding ("${truncate(item.encoding, 60)}") rather than re-reading the raw fact.`
-            : 'Anything that fails needs a mnemonic or chunk before it goes back in the deck.'),
+            ? `A miss means re-running its encoding, not re-reading it.`
+            : 'A miss needs a mnemonic before it goes back in.'),
       };
 
     default:
@@ -102,15 +101,15 @@ export function practiceMethod(item, skill, ctx = {}) {
 function preDeadlineDetail(skill, item, partner) {
   switch (skill.genre) {
     case 'reasoning':
-      return `Full past-paper conditions: 4 questions in 25 min, clock running, no notes. Include ${item.subSkill || item.title}${partner ? ` and ${partner}` : ''} unlabelled so you must pick the method.`;
+      return `Past-paper conditions, clock running, no notes. Unlabelled${partner ? `, with ${partner}` : ''}.`;
     case 'conceptual':
-      return `Write a timed answer on ${item.title} — exam wording, exam time limit, no notes. Mark it against the spec afterwards.`;
+      return `Timed answer, exam wording, no notes. Mark it after.`;
     case 'physical':
-      return `Run ${item.title} in performance conditions: same warm-up, same kit, same order, one attempt only. No re-dos.`;
+      return `Performance conditions. One attempt, no re-dos.`;
     case 'language':
-      return `Test conditions: recall under time pressure, then produce the item in a full sentence unaided — spoken if the exam has an oral.`;
+      return `Under time pressure, then a full sentence unaided.`;
     case 'memorization':
-      return `Timed full dump: write everything you can recall of ${item.title} in 3 minutes, then check gaps against the list.`;
+      return `Write everything you can recall in 3 minutes, then check gaps.`;
     default:
       return `Practise ${item.title} in the exact format the assessment will use, under time.`;
   }
@@ -163,8 +162,4 @@ export function workUnits(item, skill, ctx = {}) {
     return Math.max(1, Math.ceil(itemCount / 20));
   }
   return 1;
-}
-
-function truncate(text, n) {
-  return text.length <= n ? text : `${text.slice(0, n - 1)}…`;
 }

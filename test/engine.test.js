@@ -299,7 +299,9 @@ test('open physical skills are randomized from session one', () => {
 
   const session = buildSession(store, addDays(D0, 1));
   assert.equal(session.blocks[0].method.label, 'Variable / reactive drill');
-  assert.match(session.blocks[0].method.detail, /randomize/i);
+  // Varied from the first session — blocked repetition actively hurts open skills.
+  assert.match(session.blocks[0].method.detail, /vary|never two the same/i);
+  assert.doesNotMatch(session.blocks[0].method.detail, /identical conditions|blocked/i);
 });
 
 test('physical skills never repeat without a sleep cycle', () => {

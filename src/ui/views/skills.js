@@ -19,14 +19,14 @@ export function skillsView(app) {
       }, ui.intake.open ? 'Cancel' : '+ New skill'),
     ),
     h('p', { class: 'lede' },
-      'Each skill is a separate track with its own genre, method stack and forgetting-rate calibration.'),
+      'Each has its own curve and method.'),
 
     ui.intake.open && intakeForm(app),
 
     store.state.skills.length === 0 && !ui.intake.open
       ? h('div', { class: 'empty' },
           h('h3', null, 'No skills yet'),
-          h('p', null, 'Start with one. "AQA A-Level Maths", "Spanish", "Guitar", "Periodic table" — the genre is detected from the name.'),
+          h('p', null, 'Name it and the genre is detected for you.'),
         )
       : h('div', { class: 'stack', style: { marginTop: '1rem' } },
           store.state.skills.map((s) => skillCard(app, s))),
@@ -137,7 +137,7 @@ function intakeForm(app) {
           value: intake.targetDate,
           onInput: (e) => app.setIntakeField('targetDate', e.target.value),
         }),
-        h('span', { class: 'hint' }, 'Exam, performance or deadline. Inside 3 weeks, practice switches to timed format.'),
+        h('span', { class: 'hint' }, 'Inside 3 weeks, practice goes timed.'),
       ),
     ),
 
@@ -153,13 +153,13 @@ function intakeForm(app) {
 function detectionHint(intake) {
   const detected = intake.detected;
   if (detected?.genre) {
-    const base = `Detected: ${GENRE_LABEL[detected.genre]}${detected.physicalType ? ` (${detected.physicalType})` : ''}.`;
-    if (intake.genreTouched) return `${base} You have set it manually below, so it will not change as you keep typing.`;
+    const base = `Looks like ${GENRE_LABEL[detected.genre]}${detected.physicalType ? ` (${detected.physicalType})` : ''}.`;
+    if (intake.genreTouched) return `${base} Yours wins.`;
     return detected.blend.length
-      ? `${base} This looks like a blend — also matches ${detected.blend.map((g) => GENRE_LABEL[g]).join(' and ')}. Methods from both are combined; pick the dominant one below.`
-      : `${base} Change it below if that is wrong.`;
+      ? `${base} Also ${detected.blend.map((g) => GENRE_LABEL[g]).join(' and ')} — both get used.`
+      : base;
   }
-  if (intake.name) return 'Could not detect a genre from that name — pick one below.';
+  if (intake.name) return 'Pick one below.';
   return '';
 }
 
@@ -173,7 +173,7 @@ function physicalTypeField(app, intake, sync) {
         'Open — reactive (tennis return, sparring)'),
     ),
     h('span', { class: 'hint' },
-      'Open skills are randomized from day one — blocked practice actively hurts them.'),
+      'Open skills randomise from day one.'),
   );
 }
 
@@ -262,8 +262,7 @@ function diagnosticPanel(app) {
       'Forgetting-rate diagnostic (optional, ~2 min) — calibrates how fast your curve runs'),
     h('div', { class: 'stack', style: { padding: 'var(--s-sm) 0 0' } },
       h('p', { class: 'lede small' },
-        'Pick 2–3 things you learned recently, try to recall each one blind right now, then score how much actually came back. ' +
-        'This is a real retrieval attempt, not a self-assessment — it back-solves your memory stability and scales every interval accordingly.'),
+        'Recall 2–3 recent things now, then score what came back.'),
 
       rowNodes,
       calWrap,
@@ -395,7 +394,7 @@ function settingsCard(app) {
             value: settings.dailyCapacityItems,
             onChange: (e) => app.setSetting('dailyCapacityItems', Number(e.target.value)),
           }),
-          h('span', { class: 'hint' }, 'How many things you are willing to review in a day. Over this, you get a warning and an offer to redistribute. How long each takes is up to you.'),
+          h('span', { class: 'hint' }, 'Over this, you get an offer to redistribute.'),
         ),
         h('label', { class: 'field' },
           h('span', { class: 'lbl' }, 'Pre-deadline window (days)'),
@@ -406,7 +405,7 @@ function settingsCard(app) {
             value: settings.preDeadlineWindowDays,
             onChange: (e) => app.setSetting('preDeadlineWindowDays', Number(e.target.value)),
           }),
-          h('span', { class: 'hint' }, 'How close to a target date timed, exam-format practice kicks in.'),
+          h('span', { class: 'hint' }, 'When timed practice kicks in.'),
         ),
       ),
       h('div', { class: 'row', style: { marginTop: 'var(--s-xs)' } },
@@ -431,7 +430,7 @@ function settingsCard(app) {
         }, 'Replace all data'),
       ),
       h('p', { class: 'small faint', style: { margin: '0.5rem 0 0' } },
-        'Skills, review history and ease factors are saved in this browser and reloaded on your next visit.'),
+        'Saved in this browser.'),
     ),
   );
 }

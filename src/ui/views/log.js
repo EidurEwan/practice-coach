@@ -11,7 +11,7 @@ export function logView(app) {
   if (skills.length === 0) {
     return h('div', { class: 'empty' },
       h('h3', null, 'Add a skill first'),
-      h('p', null, 'Each skill is its own track with its own method stack and forgetting curve. You can run several at once.'),
+      h('p', null, 'Each one gets its own schedule and method.'),
       h('button', { class: 'btn primary', onClick: () => app.go('skills') }, 'Add a skill'),
     );
   }
@@ -24,7 +24,7 @@ export function logView(app) {
   return h('div', null,
     h('h2', null, 'What did you study today?'),
     h('p', { class: 'lede' },
-      'Log it and it gets a first review date, a method, and a place in the interleaving rotation. Everything else follows from there.'),
+      'It gets a review date and a method straight away.'),
 
     ui.lastLog && logResultCard(app),
 
@@ -66,7 +66,7 @@ export function logView(app) {
       h('label', { class: 'field' },
         h('span', { class: 'lbl' }, 'Date studied'),
         h('input', { type: 'date', name: 'date', value: ui.date || todayISO() }),
-        h('span', { class: 'hint' }, 'Backdate it if you are catching up — the schedule counts from first exposure.'),
+        h('span', { class: 'hint' }, 'Backdate if you are catching up.'),
       ),
 
       h('button', { class: 'btn primary', type: 'submit' }, 'Log it'),
@@ -109,7 +109,7 @@ function singleFields(app, skill, siblings) {
         placeholder: skill.genre === 'reasoning' ? 'e.g. induction' : 'the specific part you worked on',
       }),
       h('span', { class: 'hint' },
-        'If part of it felt hard, name it. The next session targets that part instead of redoing the whole topic.'),
+        'Naming it narrows the next session.'),
     ),
 
     (needsEncoding || perItem) && h('label', { class: 'field' },
@@ -123,14 +123,14 @@ function singleFields(app, skill, siblings) {
         ENCODING_OPTIONS.map((opt) => h('span', { class: 'badge', title: opt.hint }, opt.label)),
       ),
       h('span', { class: 'hint' },
-        'Spacing only works on something that was encoded well to begin with. Do not schedule a raw fact.'),
+        'Never schedule a raw fact.'),
     ),
 
     h('label', { class: 'check' },
       h('input', { type: 'checkbox', name: 'shaky' }),
       h('span', null,
         h('b', null, 'Some of it felt shaky.'),
-        ' Tightens the first interval and puts it on the weak list for extra interleaving.'),
+        ' Brings it back sooner.'),
     ),
 
     siblings.length > 0 && h('label', { class: 'field' },
@@ -138,7 +138,7 @@ function singleFields(app, skill, siblings) {
       h('select', { name: 'confusableWith', multiple: true, size: Math.min(4, siblings.length) },
         siblings.map((s) => h('option', { value: s.id }, s.title))),
       h('span', { class: 'hint' },
-        'Confusable pairs are kept apart for their first reviews so each becomes solid alone, then deliberately scheduled together to force discrimination.'),
+        'Kept apart until solid, then drilled together.'),
     ),
   );
 }
@@ -154,7 +154,7 @@ function bulkFields(skill) {
         ? 'el bolígrafo | the pen | "bowl of graph paper"\nla mochila | the backpack'
         : 'Beryllium | Be, 4 | "Berry"\nMagnesium | Mg, 12',
     }),
-    h('span', { class: 'hint' }, 'Format: cue | answer | encoding. Answer and encoding are optional.'),
+    h('span', { class: 'hint' }, 'cue | answer | encoding'),
   );
 }
 

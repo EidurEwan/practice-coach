@@ -17,7 +17,7 @@ export function upcomingView(app) {
   if (store.state.items.length === 0) {
     return h('div', { class: 'empty' },
       h('h3', null, 'Nothing scheduled yet'),
-      h('p', null, 'Log something and its whole future review chain appears here — out to five years if you want to see it.'),
+      h('p', null, 'Log something and its whole future appears here.'),
       h('button', { class: 'btn primary', onClick: () => app.go('log') }, 'Log what you studied'),
     );
   }
@@ -88,7 +88,7 @@ function legend() {
     ),
     h('span', { class: 'legend-item' },
       h('span', { class: 'chip-mini' }, '3rd'),
-      'the same item coming back again — projected, assuming you keep rating "OK"',
+      'the same item again — projected',
     ),
   );
 }

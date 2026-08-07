@@ -69,9 +69,9 @@ typography:
     lineHeight: 1.5
     letterSpacing: "normal"
 rounded:
-  sm: "6px"
-  md: "10px"
-  lg: "14px"
+  sm: "8px"
+  md: "12px"
+  lg: "18px"
   pill: "999px"
 spacing:
   xs: "4px"
@@ -162,8 +162,9 @@ accents and do not count against this — they never mark an action.
 
 **The Skill Hue Rule.** Each skill carries one of six categorical hues, assigned by its
 position in the skill list so the first six are always distinct. A hue may only appear as
-a marker (a dot) or as a meter fill. It is never text colour, never a solid fill behind
-text, and never indicates status — which is why it cannot fail contrast or be confused
+a marker (a dot), a meter fill, or a 4px band along the *top* edge of a card — never the
+left or right edge, which is the coloured-border card everyone ships. It is never text
+colour, never a solid fill behind text, and never indicates status — which is why it cannot fail contrast or be confused
 with overdue, attention, or steady.
 
 **The Small Dose Rule.** Status colour appears as a dot, a short label, or coloured text —
@@ -184,8 +185,9 @@ layout can stay free of rules and boxes.
 
 ### Hierarchy
 
-Eight steps. Every `font-size` resolves to one of these tokens.
+Nine steps. Every `font-size` resolves to one of these tokens.
 
+- **Hero** (700, 3rem, −0.03em): the count of things due on Today, and nothing else.
 - **Display** (700, 1.75rem, −0.021em): the one page title per screen.
 - **Title** (600, 1.3125rem): section headings, onboarding headings.
 - **Headline** (600, 1.0625rem): the name of a practice item, card titles.
@@ -197,6 +199,10 @@ Eight steps. Every `font-size` resolves to one of these tokens.
   makes iOS zoom the page when the field takes focus.
 
 ### Named Rules
+**The Short Copy Rule.** A hint is one short line. Anything longer belongs behind a
+disclosure or does not belong. Where a number can carry the meaning, use the number: the
+day's size is a 3rem numeral, not a sentence.
+
 **The Two-Step Rule.** Adjacent levels in the hierarchy differ by size *and* weight, never
 by colour alone. If two things look similar, one of them moves a full step.
 
@@ -231,8 +237,8 @@ exist only to separate rows inside a single card.
 
 ## Shapes
 
-Softly rounded and consistent: 14px on cards, 10px on buttons, inputs, and inset fills,
-6px on small chips and badges, and full pills only on status dots and counts. Nothing in
+Softly rounded and consistent: 18px on cards, 12px on buttons, inputs, and inset fills,
+8px on small chips and badges, and full pills only on status dots and counts. Nothing in
 the system is square.
 
 ## Components

@@ -580,7 +580,7 @@ export function buildSession(store, date = todayISO()) {
     warnings.push({
       level: 'warn',
       type: 'overload',
-      message: `${totalUnits} things are due against your cap of ${capacity}. ${
+      message: `${totalUnits} due against your cap of ${capacity}. ${
         overflow.length
           ? `${overflow.length} non-urgent block(s) can move to tomorrow, bringing today to ~${projected} min.`
           : 'Everything due today is overdue or a priority weak point, so none of it should move — consider a longer session or splitting it across the day.'
@@ -612,7 +612,7 @@ export function buildSession(store, date = todayISO()) {
     warnings.unshift({
       level: 'warn',
       type: 'overdue',
-      message: `${overdueCount} block(s) are past their review date. Overdue material is scheduled first — the longer it sits, the more it costs to bring back.`,
+      message: `${overdueCount} ${overdueCount === 1 ? 'item is' : 'items are'} overdue. Those come first — the longer they sit, the more they cost.`,
     });
   }
 

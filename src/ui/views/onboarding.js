@@ -84,11 +84,11 @@ function stepWelcome(app) {
     }, `${d}d`)));
 
     mount(noteEl, step < 0
-      ? 'Try it — mark it recalled and watch the return date move.'
+      ? 'Tap below and watch the date move.'
       : rating === 'failed'
-        ? 'Missed — straight back to one day. Nothing is held against you; the interval just restarts.'
+        ? 'Missed — back to one day. No penalty, it just restarts.'
         : step === CURVE.length - 1
-          ? 'Each success roughly doubles the gap. That expanding spacing is the whole mechanism.'
+          ? 'Each success roughly doubles the gap. That is the whole idea.'
           : 'Recalled — so the gap widens. Keep going.');
   }
 
@@ -99,7 +99,7 @@ function stepWelcome(app) {
       h('div', { class: 'ob-kicker' }, 'Welcome'),
       h('h2', { class: 'page-title' }, 'It decides what you practise, and when.'),
       h('p', { class: 'ob-lede' },
-        'Practice Coach does not teach the skill. It owns the schedule around it — when each thing comes back, how the session is run, and what to do when something stops improving.'),
+        'It does not teach the skill. It decides when each thing comes back.'),
 
       h('div', { class: 'ob-slip' },
         h('div', { class: 'ob-slip-head' },
@@ -110,7 +110,7 @@ function stepWelcome(app) {
           h('li', null,
             h('span', { class: 'n' }, '1'),
             h('span', { class: 't' }, 'Proofs — induction',
-              h('div', { class: 'small faint' }, 'Interleaved with vectors, so you have to spot the method')),
+              h('div', { class: 'small faint' }, 'Mixed with vectors')),
             stampEl,
           ),
         ),
@@ -123,7 +123,7 @@ function stepWelcome(app) {
       ),
 
       h('p', { class: 'lede', style: { marginTop: 'var(--s-lg)' } },
-        'Setup takes about a minute. You can skip it and start logging straight away.'),
+        'Setup takes a minute. Skippable.'),
     ),
     action: h('button', { class: 'btn primary', onClick: () => app.onboardNext() }, 'Set up my first skill'),
   };
@@ -150,18 +150,19 @@ function stepSkill(app, ob) {
     action.disabled = !ob.name.trim() || !ob.genre;
     mount(hintEl, ob.detected?.genre
       ? (ob.genreTouched
-        ? `Detected ${GENRE_LABEL[ob.detected.genre]} from the name; you have chosen ${GENRE_LABEL[ob.genre] || 'another genre'} instead.`
+        ? `Looks like ${GENRE_LABEL[ob.detected.genre]} — yours wins.`
         : ob.detected.blend.length
-          ? `Looks like ${GENRE_LABEL[ob.detected.genre]}, with some ${ob.detected.blend.map((g) => GENRE_LABEL[g]).join(' and ')}. Methods from both get combined.`
-          : `Looks like ${GENRE_LABEL[ob.detected.genre]}. Change it below if that is wrong.`)
-      : ob.name ? 'Could not tell from the name — pick one below.' : '');
+          ? `Looks like ${GENRE_LABEL[ob.detected.genre]} + ${ob.detected.blend.map((g) => GENRE_LABEL[g]).join(' and ')}.`
+          : `Looks like ${GENRE_LABEL[ob.detected.genre]}.`)
+      : ob.name ? 'Pick one below.' : '');
 
-    mount(choiceWrap, GENRES.map((g) => h('button', {
+    mount(choiceWrap, GENRES.map((g, i) => h('button', {
       type: 'button',
+      dataset: { hue: String((i % 6) + 1) },
       'aria-pressed': String(g === ob.genre),
       onClick: () => { app.setOnboard({ genre: g, genreTouched: true }); sync(); },
     },
-      h('span', { class: 'n' }, GENRE_LABEL[g]),
+      h('span', { class: 'n' }, h('span', { class: 'skill-dot' }), GENRE_LABEL[g]),
       h('span', { class: 'd' }, GENRE_BLURB[g]),
     )));
 
@@ -176,7 +177,7 @@ function stepSkill(app, ob) {
     h('div', { class: 'ob-kicker' }, 'Step 1 of 4'),
     h('h2', { class: 'page-title' }, 'What are you learning?'),
     h('p', { class: 'ob-lede' },
-      'The kind of skill decides the interval curve, the interleaving, and how sessions are run.'),
+      'This decides the curve and the method.'),
 
     h('label', { class: 'field' },
       h('span', { class: 'lbl' }, 'Skill name'),
@@ -251,7 +252,7 @@ function stepContext(app, ob) {
       h('div', { class: 'ob-kicker' }, 'Step 2 of 4'),
       h('h2', { class: 'page-title' }, 'Is there a date to work towards?'),
       h('p', { class: 'ob-lede' },
-        'Optional. If you set one, practice switches to timed, exam-format conditions in the last three weeks — matching the real conditions measurably improves recall under them.'),
+        'Optional. In the last three weeks, practice goes timed.'),
 
       h('label', { class: 'field' },
         h('span', { class: 'lbl' }, 'Level or goal'),
@@ -337,7 +338,7 @@ function stepDiagnostic(app, ob) {
       h('div', { class: 'ob-kicker' }, 'Step 3 of 4 — optional'),
       h('h2', { class: 'page-title' }, 'How fast do you forget?'),
       h('p', { class: 'ob-lede' },
-        'Think of something you learned recently. Try to recall it now, before checking, then score how much came back — a real attempt, not a guess at how well you know it.'),
+        'Recall something recent, then score what came back.'),
       rows,
       visible < ob.diagnostic.length && h('button', {
         class: 'btn tiny',
@@ -366,7 +367,7 @@ function stepTopic(app, ob) {
       h('div', { class: 'ob-kicker' }, 'Step 4 of 4'),
       h('h2', { class: 'page-title' }, 'What have you studied so far?'),
       h('p', { class: 'ob-lede' },
-        `Log one thing you have already covered in ${ob.name || 'this skill'}. It gets a first review date immediately, so you land on a real practice card instead of an empty one.`),
+        `One thing you have already covered in ${ob.name || 'this skill'}.`),
 
       h('label', { class: 'field' },
         h('span', { class: 'lbl' }, perItem ? 'One item' : 'One topic'),
@@ -391,7 +392,7 @@ function stepTopic(app, ob) {
           onInput: (e) => app.setOnboard({ subSkill: e.target.value }),
         }),
         h('span', { class: 'hint' },
-          'Naming the specific part means the next session targets it, instead of redoing the whole topic.'),
+          'The next session targets that part.'),
       ),
 
       ob.genre === 'memorization' && h('label', { class: 'field' },
@@ -403,7 +404,7 @@ function stepTopic(app, ob) {
           onInput: (e) => app.setOnboard({ encoding: e.target.value }),
         }),
         h('span', { class: 'hint' },
-          'Spacing only works on something that was encoded well to begin with. Do not schedule a raw fact.'),
+          'Never schedule a raw fact.'),
       ),
 
       h('label', { class: 'check' },
@@ -445,7 +446,7 @@ function stepDone(app, ob) {
           }, shortDate(d)))),
         ),
         h('div', { class: 'ob-slip-note' },
-          'The first date is committed. The rest assume you keep rating "OK" — a miss pulls them back in.'),
+          'First date is fixed. The rest assume "OK".'),
       ),
 
       result?.flags.length ? h('div', { style: { marginTop: 'var(--s-md)' } },
