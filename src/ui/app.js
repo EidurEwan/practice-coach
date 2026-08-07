@@ -1,7 +1,7 @@
 // Controller: owns transient UI state and wires user actions to the engine.
 // Rendering happens only on explicit actions, so typing never destroys a field.
 
-import { h, mount } from './dom.js';
+import { h, mount, svg } from './dom.js';
 import { addDays, todayISO, shortDate, weekday } from '../engine/dates.js';
 import { detectGenre } from '../engine/genres.js';
 import { createSkill } from '../engine/model.js';
@@ -33,6 +33,35 @@ const ROUTES = [
   { id: 'upcoming', label: 'Upcoming' },
   { id: 'skills', label: 'Skills' },
 ];
+
+// Drawn from the product's own vocabulary rather than a generic icon set: the
+// point you are at, adding to the record, dates ahead, and one meter per track.
+// Four text labels with two of them carrying badges were impossible to scan at
+// a glance, and the badges pushed their labels off the shared baseline.
+const TAB_ART = {
+  today: (s) => [
+    s('circle', { cx: 12, cy: 12, r: 7.6 }),
+    s('circle', { cx: 12, cy: 12, r: 2.7, fill: 'currentColor', stroke: 'none' }),
+  ],
+  log: (s) => [s('path', { d: 'M12 5.6v12.8M5.6 12h12.8' })],
+  upcoming: (s) => [
+    s('rect', { x: 3.4, y: 5.4, width: 17.2, height: 15.2, rx: 3.2 }),
+    s('path', { d: 'M3.4 10.2h17.2M8.4 3.6v3.4M15.6 3.6v3.4' }),
+  ],
+  skills: (s) => [s('path', { d: 'M4.6 7.2h14.8M4.6 12h10M4.6 16.8h5.6' })],
+};
+
+function tabIcon(id) {
+  return svg('svg', {
+    class: 'tab-icon',
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': 1.7,
+    'stroke-linecap': 'round',
+    'aria-hidden': 'true',
+  }, TAB_ART[id](svg));
+}
 
 const VIEWS = { today: todayView, log: logView, upcoming: upcomingView, skills: skillsView };
 
@@ -594,6 +623,23 @@ function markEntrance(host) {
 
 // ---------------------------------------------------------------- rendering
 
+// The tab bar is built once and patched thereafter. Re-mounting it on every
+// render would replace the buttons mid-transition, so the indicator could never
+// slide and the colour change would always land instantly.
+let tabNodes = null;
+
+function buildTabs(tabs) {
+  tabs.style.setProperty('--tab-count', String(ROUTES.length));
+  tabNodes = ROUTES.map((r) => {
+    const count = h('span', { class: 'count', hidden: true });
+    const button = h('button', {
+      onClick: () => app.go(r.id),
+    }, tabIcon(r.id), h('span', { class: 'tab-label' }, r.label), count);
+    return { id: r.id, button, count };
+  });
+  mount(tabs, tabNodes.map((t) => t.button));
+}
+
 function renderChrome() {
   const onboarding = app.onboarding;
   const masthead = document.getElementById('masthead');
@@ -604,6 +650,7 @@ function renderChrome() {
   document.body.classList.toggle('is-onboarding', onboarding);
   if (onboarding) {
     mount(tabs);
+    tabNodes = null;
     return;
   }
 
@@ -611,14 +658,17 @@ function renderChrome() {
   const due = dueItems(state, app.ui.date).length;
   const overdue = overdueItems(state, app.ui.date).length;
 
-  mount(tabs, ROUTES.map((r) => h('button', {
-    'aria-current': String(r.id === app.ui.route),
-    onClick: () => app.go(r.id),
-  },
-    r.label,
-    r.id === 'today' && due > 0 && h('span', { class: `count ${overdue ? 'alert' : ''}` }, String(due)),
-    r.id === 'skills' && state.skills.length > 0 && h('span', { class: 'count' }, String(state.skills.length)),
-  )));
+  if (!tabNodes) buildTabs(tabs);
+
+  const badges = { today: due, skills: state.skills.length };
+  for (const { id, button, count } of tabNodes) {
+    button.setAttribute('aria-current', String(id === app.ui.route));
+    const n = badges[id] || 0;
+    count.hidden = n === 0;
+    count.textContent = String(n);
+    count.className = `count ${id === 'today' && overdue ? 'alert' : ''}`;
+  }
+  tabs.style.setProperty('--tab-index', String(ROUTES.findIndex((r) => r.id === app.ui.route)));
 
   document.getElementById('stamped-date').textContent =
     app.ui.date === app.todayISO

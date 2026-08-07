@@ -43,7 +43,7 @@ export function logView(app) {
           onChange: (e) => app.setLogSkill(e.target.value),
         }, skills.map((s) => h('option', { value: s.id, selected: s.id === skill.id },
           `${s.name} — ${GENRE_LABEL[s.genre]}${s.physicalType ? ` (${s.physicalType})` : ''}`))),
-        h('span', { class: 'hint' }, stack.primary.join(' · ')),
+        h('span', { class: 'hint' }, stack.primary[0]),
       ),
 
       perItem && h('div', { class: 'row', style: { marginBottom: 'var(--s-md)' } },
@@ -133,10 +133,18 @@ function singleFields(app, skill, siblings) {
         ' Brings it back sooner.'),
     ),
 
-    siblings.length > 0 && h('label', { class: 'field' },
+    // Toggles rather than a native multi-select. A <select multiple> on a phone
+    // is a small scrolling list that gives no sign more than one can be picked,
+    // and needs a precise tap per row. Checkboxes carry the same name, so
+    // form.getAll('confusableWith') keeps working untouched.
+    siblings.length > 0 && h('div', { class: 'field' },
       h('span', { class: 'lbl' }, 'Easily confused with (optional)'),
-      h('select', { name: 'confusableWith', multiple: true, size: Math.min(4, siblings.length) },
-        siblings.map((s) => h('option', { value: s.id }, s.title))),
+      h('div', { class: 'opt-set' },
+        siblings.map((s) => h('label', { class: 'opt' },
+          h('input', { type: 'checkbox', name: 'confusableWith', value: s.id }),
+          h('span', null, s.title),
+        )),
+      ),
       h('span', { class: 'hint' },
         'Kept apart until solid, then drilled together.'),
     ),

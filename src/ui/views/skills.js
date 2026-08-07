@@ -316,12 +316,17 @@ function skillCard(app, skill) {
       h('div', { class: 'row' },
         h('button', { class: 'btn tiny', onClick: () => app.toggleSkill(skill.id) },
           expanded ? 'Hide' : `Show ${items.length}`),
-        h('button', { class: 'btn tiny danger', onClick: () => app.deleteSkill(skill) }, 'Delete'),
+        // Bare, not filled: deleting a skill takes its whole review history
+        // with it, and it should not sit beside "Show" looking like a peer.
+        h('button', { class: 'btn bare tiny danger', onClick: () => app.deleteSkill(skill) }, 'Delete'),
       ),
     ),
 
-    h('div', { class: 'small muted', style: { marginTop: 'var(--s-xs)' } },
-      stack.primary.join(' · ')),
+    // The primary method, in one line. The full stack is reference material
+    // and ran to three lines of grey per card — on a phone with three skills
+    // that was nine lines of the least actionable text on the screen. It moves
+    // into the panel that "Show" already opens.
+    h('div', { class: 'small muted', style: { marginTop: 'var(--s-xs)' } }, stack.primary[0]),
 
     mode.mode === 'pre-deadline' && h('div', { class: 'msg warn', style: { marginTop: 'var(--s-sm)' } },
       h('span', { class: 'ico' }, '!'),
@@ -331,6 +336,9 @@ function skillCard(app, skill) {
 
     skill.diagnostic && h('div', { class: 'small faint', style: { marginTop: 'var(--s-xs)' } },
       `Diagnostic ${skill.diagnostic.takenAt}: ${skill.diagnostic.verdict}`),
+
+    expanded && h('ul', { class: 'method-stack', style: { marginTop: 'var(--s-md)' } },
+      stack.primary.map((m) => h('li', null, m))),
 
     expanded && (items.length === 0
       ? h('p', { class: 'small faint', style: { marginTop: 'var(--s-sm)' } }, 'Nothing logged in this track yet.')

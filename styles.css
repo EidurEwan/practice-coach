@@ -12,6 +12,13 @@
   --surface: #fbfbf9;
   --sunken: #e4e3df;
   --hairline: #dbdad5;
+  /* The floating tab pill: opaque enough that its labels never depend on what
+     happens to be scrolling underneath, sheer enough for the blur to read. */
+  --veil: rgb(251 251 249 / 0.92);
+  /* A secondary button is a sunken fill, which reads as inset on a card but is
+     within a few percent of the ground behind it — on the page background the
+     button simply disappeared. This edge is what makes it a button anywhere. */
+  --btn-edge: rgb(0 0 0 / 0.12);
 
   --text: #1c1c1e;
   --text-2: #55555f;
@@ -74,10 +81,12 @@
   --glow-accent: 0 4px 14px rgb(59 98 217 / 0.28);
   --sheen: inset 0 1px 0 rgb(255 255 255 / 0.16);
 
-  /* An ambient light field behind everything: two very low-alpha pools, one
-     cool and one warm, so a full screen of flat grey never happens. */
-  --wash-1: rgb(59 98 217 / 0.10);
-  --wash-2: rgb(209 98 42 / 0.07);
+  /* An ambient light field behind everything: pools of cool and warm, so a
+     full screen of flat grey never happens. These darken the light ground,
+     which *costs* contrast for dark text rather than adding it — the ceiling
+     on these alphas is set by --text-2 on the ground, not by taste. */
+  --wash-1: rgb(59 98 217 / 0.16);
+  --wash-2: rgb(209 98 42 / 0.12);
 
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   /* Lively without bouncing: a hard ease-out-quint, no overshoot. */
@@ -96,6 +105,8 @@
     --surface: #1e1e22;
     --sunken: #292930;
     --hairline: #303038;
+    --veil: rgb(30 30 34 / 0.92);
+    --btn-edge: rgb(255 255 255 / 0.14);
     --text: #f2f2f4;
     --text-2: #bcbcc6;
     --text-3: #9c9ca6;
@@ -132,6 +143,8 @@
   --surface: #1e1e22;
   --sunken: #292930;
   --hairline: #303038;
+  --veil: rgb(30 30 34 / 0.92);
+  --btn-edge: rgb(255 255 255 / 0.14);
   --text: #f2f2f4;
   --text-2: #bcbcc6;
   --text-3: #9c9ca6;
@@ -221,7 +234,9 @@ body {
   letter-spacing: -0.003em;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
-  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  /* Clears the floating tab pill: 66px tall, 12px off the bottom, plus room
+     so the last card does not stop dead against it. */
+  padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
 }
 
 :where(h1, h2, h3, p, ul, ol) { margin: 0; }
@@ -272,6 +287,9 @@ body {
 }
 .theme-toggle {
   flex: none;
+  /* Pushes itself to the right edge. The stamped date used to do this, and
+     hiding it on phones left the toggle sitting against the wordmark. */
+  margin-left: auto;
   width: 36px;
   height: 36px;
   display: grid;
@@ -293,43 +311,69 @@ body {
 .theme-toggle:active { transform: rotate(-18deg) scale(0.92); }
 
 /* ------------------------------------------------------------- navigation */
+/* On phones this is a floating pill rather than a bar welded to the bottom
+   edge: content passes under it, and the app stops looking like a web page
+   with a strip stuck to the window. */
 nav.tabs {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: max(var(--s-md), env(safe-area-inset-left, 0px));
+  right: max(var(--s-md), env(safe-area-inset-right, 0px));
+  bottom: calc(var(--s-md) + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  gap: var(--s-xs);
-  padding: var(--s-sm) var(--s-sm) calc(var(--s-sm) + env(safe-area-inset-bottom, 0px));
-  background: var(--surface);
+  /* No gap: the sliding indicator steps by exactly one column width, which is
+     only true when the columns tile the track without seams. */
+  gap: 0;
+  padding: 6px;
+  border-radius: var(--r-pill);
+  background: var(--veil);
+  backdrop-filter: blur(20px) saturate(1.4);
   box-shadow: var(--shadow-raised);
+}
+/* The active pill is one element that slides, not four that switch on and off.
+   --tab-index is set by the controller; the tabs are equal-width, so the step
+   is exactly 100% of the indicator's own width and needs no measuring. */
+nav.tabs::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc((100% - 12px) / var(--tab-count, 4));
+  border-radius: var(--r-pill);
+  background: var(--accent-wash);
+  transform: translateX(calc(var(--tab-index, 0) * 100%));
+  transition: transform var(--dur-2) var(--ease-lively);
 }
 nav.tabs button {
   appearance: none;
+  position: relative;
+  z-index: 1; /* above the sliding indicator */
   border: 0;
   background: none;
   color: var(--text-3);
   font: inherit;
   font-size: var(--t-caption);
   font-weight: 600;
-  min-height: 52px;
+  min-height: 54px;
   border-radius: var(--r-md);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--s-xs);
+  gap: 3px;
   transition:
     background var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease),
     transform var(--dur-1) var(--ease);
 }
 nav.tabs button:active { transform: scale(0.96); }
-nav.tabs button[aria-current="true"] { color: var(--accent); background: var(--accent-wash); }
+nav.tabs button[aria-current="true"] { color: var(--accent); }
+.tab-icon { width: 23px; height: 23px; flex: none; display: block; }
+.tab-label { line-height: 1.1; }
 nav.tabs .count {
   font-size: var(--t-caption);
   line-height: 1;
@@ -339,8 +383,24 @@ nav.tabs .count {
   background: var(--sunken);
   color: var(--text-2);
 }
+/* On phones the count rides the icon as a badge instead of sitting in the
+   column. In flow it made the two tabs that carry a count taller than the two
+   that do not, so the four labels sat at three different heights. */
+@media (max-width: 719px) {
+  nav.tabs .count {
+    position: absolute;
+    top: 3px;
+    left: 50%;
+    margin-left: 4px;
+    padding: 2px 5px;
+    min-width: 18px;
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+}
 nav.tabs button[aria-current="true"] .count { background: var(--accent); color: var(--on-solid); }
-nav.tabs .count.alert { background: var(--overdue); color: var(--on-solid); }
+/* Overdue outranks selected: the tab you are standing on is the one most
+   likely to be overdue, and that is exactly when the warning must survive. */
+nav.tabs button .count.alert { background: var(--overdue); color: var(--on-solid); }
 
 /* --------------------------------------------------------------- headings */
 .page-title {
@@ -390,6 +450,7 @@ h3 { font-size: var(--t-headline); font-weight: 600; letter-spacing: -0.011em; }
     box-shadow var(--dur-2) var(--ease),
     transform var(--dur-1) var(--ease);
 }
+.btn { box-shadow: inset 0 0 0 1px var(--btn-edge); }
 .btn:hover:not(:disabled) { background: var(--hairline); }
 .btn:active:not(:disabled) { transform: scale(0.96); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -404,7 +465,8 @@ h3 { font-size: var(--t-headline); font-weight: 600; letter-spacing: -0.011em; }
 }
 .btn.primary:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); }
 .btn.primary:active:not(:disabled) { transform: scale(0.96); }
-.btn.bare { background: none; color: var(--text-2); }
+/* Bare buttons are meant to recede until pointed at, so they keep no edge. */
+.btn.bare { background: none; color: var(--text-2); box-shadow: none; }
 .btn.bare:hover:not(:disabled) { background: var(--sunken); color: var(--text); }
 .btn.tiny { min-height: 36px; padding: 7px 12px; font-size: var(--t-footnote); }
 .btn.danger { color: var(--overdue); }
@@ -439,6 +501,33 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 2px var(--accent);
 }
 input::placeholder, textarea::placeholder { color: var(--text-3); }
+/* Multi-select as tappable chips. The input stays in the DOM so the form and
+   the accessibility tree both still see a real checkbox group. */
+.opt-set { display: flex; flex-wrap: wrap; gap: var(--s-sm); }
+.opt { position: relative; display: inline-flex; }
+.opt input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.opt span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  background: var(--sunken);
+  color: var(--text-2);
+  font-size: var(--t-footnote);
+  font-weight: 500;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.opt input:checked + span { background: var(--accent); color: var(--on-solid); font-weight: 600; }
+.opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) { .opt input:not(:checked):hover + span { background: var(--hairline); color: var(--text); } }
+
 .check { display: flex; gap: var(--s-md); align-items: flex-start; margin-bottom: var(--s-lg); cursor: pointer; }
 .check input { margin-top: 2px; width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .grid2 { display: grid; gap: 0 var(--s-lg); }
@@ -547,8 +636,19 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   min-height: 32px;
 }
 .why > summary::-webkit-details-marker { display: none; }
-.why > summary::after { content: "⌄"; font-size: var(--t-caption); }
-.why[open] > summary::after { content: "⌃"; }
+/* Drawn, not typed: the "⌄" glyph sits below the baseline and is a different
+   weight in every fallback face. Two borders give a chevron that matches the
+   text it sits beside and turns when the disclosure opens. */
+.why > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--dur-2) var(--ease-lively);
+}
+.why[open] > summary::after { transform: translateY(1px) rotate(225deg); }
 .why > summary:hover { color: var(--text-2); }
 .why .why-body {
   color: var(--text-2);
@@ -603,11 +703,13 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .capacity .bar { height: 6px; border-radius: var(--r-pill); background: var(--sunken); overflow: hidden; }
 .capacity .bar i { display: block; height: 100%; background: var(--accent); border-radius: var(--r-pill); }
 .capacity .bar i.over { background: var(--attention); }
+/* Secondary, not tertiary: these sit on the ground, and tertiary ink does not
+   survive the ambient wash there. See the Ground Ink Rule in DESIGN.md. */
 .capacity .labels {
   display: flex;
   justify-content: space-between;
   font-size: var(--t-caption);
-  color: var(--text-3);
+  color: var(--text-2);
   margin-top: var(--s-sm);
 }
 
@@ -633,7 +735,17 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .reveal .lbl { font-size: var(--t-caption); font-weight: 600; color: var(--text-3); }
 
 .ratings { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-sm); margin-top: var(--s-lg); }
-.ratings .btn { text-align: left; padding: var(--s-md); background: var(--surface); box-shadow: var(--shadow-rest); }
+/* Column layout with the outcome pushed to the bottom edge. Left to flow, a
+   hint that wrapped to three lines dropped its outcome line below the one
+   beside it, and the row read as broken. */
+.ratings .btn {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: var(--s-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-rest);
+}
 .ratings .btn:hover:not(:disabled) { background: var(--accent-wash); transform: translateY(-2px); box-shadow: var(--shadow-lift); }
 .ratings .btn:active:not(:disabled) { transform: scale(0.97); }
 .ratings .btn small {
@@ -649,7 +761,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
    accents on one screen and told the reader nothing. */
 .ratings .btn .outcome {
   display: block;
-  margin-top: var(--s-sm);
+  margin-top: auto;
+  padding-top: var(--s-sm);
   font-size: var(--t-caption);
   font-weight: 600;
   color: var(--text-2);
@@ -770,7 +883,9 @@ details[open] > .card-out { animation: disclose var(--dur-2) var(--ease-lively) 
   border-radius: var(--r-md);
   width: 100%;
 }
-.segmented .btn { background: none; min-height: 36px; padding: var(--s-sm) var(--s-xs); font-size: var(--t-footnote); }
+/* Segments sit inside one sunken track, so they carry no edge of their own —
+   only the selected one lifts out of it. */
+.segmented .btn { background: none; box-shadow: none; min-height: 36px; padding: var(--s-sm) var(--s-xs); font-size: var(--t-footnote); }
 .segmented .btn:hover:not(:disabled) { background: none; color: var(--text); }
 .segmented .btn[aria-pressed="true"] { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: var(--shadow-rest); }
 @media (min-width: 560px) { .segmented { width: auto; } .segmented .btn { padding: var(--s-sm) var(--s-md); } }
@@ -850,7 +965,7 @@ details[open] > .card-out { animation: disclose var(--dur-2) var(--ease-lively) 
 .skill-total .name { font-size: var(--t-footnote); font-weight: 500; display: inline-flex; align-items: center; gap: var(--s-sm); }
 .skill-total .meter { height: 8px; border-radius: var(--r-pill); background: var(--sunken); overflow: hidden; }
 .skill-total .meter i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--skill, var(--accent-wash)); }
-.skill-total .n { font-size: var(--t-footnote); color: var(--text-3); min-width: 2ch; text-align: right; }
+.skill-total .n { font-size: var(--t-footnote); color: var(--text-2); min-width: 2ch; text-align: right; }
 
 /* The agenda: what is reviewed, on which day, for which skill. */
 .agenda { display: grid; gap: var(--s-md); }
@@ -901,7 +1016,7 @@ details[open] > .card-out { animation: disclose var(--dur-2) var(--ease-lively) 
   flex-wrap: wrap;
   margin-bottom: var(--s-md);
 }
-.skill-group-head .genre { font-size: var(--t-footnote); font-weight: 400; color: var(--text-3); }
+.skill-group-head .genre { font-size: var(--t-footnote); font-weight: 400; color: var(--text-2); }
 
 /* ------------------------------------------------------------- item rows */
 .item-row {
@@ -1031,7 +1146,19 @@ details > summary { cursor: pointer; }
 .ob-steps i { height: 4px; flex: 1; border-radius: var(--r-pill); background: var(--hairline); }
 .ob-steps i.done { background: var(--accent); }
 .ob-steps i.current { background: var(--text-2); }
-.ob-kicker { font-size: var(--t-caption); font-weight: 600; color: var(--accent); }
+/* Accent at 12px does not clear 4.5:1 against the washed ground, so the step
+   label carries its own accent-wash chip — which is what it should have been:
+   it names where you are in the flow, exactly the job a chip does. */
+.ob-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--accent-wash);
+  font-size: var(--t-caption);
+  font-weight: 600;
+  color: var(--accent);
+}
 .onboard .page-title { margin-top: var(--s-sm); }
 .ob-lede { color: var(--text-2); max-width: var(--measure); margin: var(--s-md) 0 var(--s-xl); font-size: var(--t-body); }
 
@@ -1123,6 +1250,64 @@ details > summary { cursor: pointer; }
   .item-row summary { min-height: 44px; display: flex; align-items: center; }
 }
 
+/* The date control. Two bare chevrons either side of grey text gave no sign
+   that the day could be moved at all; as one inset pill it reads as a control
+   and stops competing with the page title above it. */
+.date-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--sunken);
+}
+.date-pill .date-arrow {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: var(--r-pill);
+  font-size: var(--t-body);
+  line-height: 1;
+  color: var(--text-2);
+}
+.date-pill .date-arrow:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.date-now {
+  padding: 0 var(--s-sm);
+  font-size: var(--t-footnote);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Touch-only devices have no keyboard, so the shortcut hint is noise. */
+@media (hover: none) and (pointer: coarse) {
+  .recall .note { display: none; }
+}
+
+/* ------------------------------------------------ phone-only refinements */
+@media (max-width: 719px) {
+  /* The masthead carried the app's name and the date, and the date control
+     directly below repeated the date. On an 844px screen that was ten percent
+     of the window spent on a duplicate and a title the user already knows. */
+  .masthead .inner { padding: var(--s-md) var(--s-lg) var(--s-sm); }
+  .masthead .stamped-date { display: none; }
+
+  .date-pill .date-arrow { min-width: 40px; min-height: 40px; }
+
+  /* A 70px button sitting in a 350px card is a small target in a lot of
+     nothing; the one thing to do next should be the width of the card. The
+     same goes for the button that submits a form. */
+  .start-btn,
+  .card > .btn.primary { width: 100%; }
+
+  /* Gutter, card padding and panel padding stacked to 120px of inset, leaving
+     270px for four rating buttons — which is what made every hint wrap three
+     lines deep. The panel now runs closer to the card's own edges. */
+  .slip-row .recall {
+    margin-inline: calc(var(--s-sm) * -1);
+    padding: var(--s-md);
+  }
+}
+
 /* ------------------------------------------------------------ responsive */
 /* Tablet: the tab bar leaves the bottom and becomes a row under the masthead. */
 @media (min-width: 720px) {
@@ -1132,17 +1317,25 @@ details > summary { cursor: pointer; }
   body { padding-bottom: 0; }
   main.shell { padding-bottom: var(--s-xxl); }
   .shell { max-width: 40rem; }
+  /* The floating pill is a phone idea. From tablet up the nav is a plain row
+     under the masthead, so every part of the pill has to be undone. */
   nav.tabs {
     position: static;
+    inset: auto;
     box-shadow: none;
     background: none;
+    backdrop-filter: none;
+    border-radius: 0;
     display: flex;
     gap: var(--s-xs);
     max-width: 40rem;
     margin: 0 auto;
     padding: 0 var(--s-lg) var(--s-md);
   }
+  nav.tabs::before { display: none; }
+  nav.tabs button[aria-current="true"] { background: var(--accent-wash); }
   nav.tabs button { min-height: 36px; flex-direction: row; gap: var(--s-sm); padding: var(--s-sm) var(--s-md); }
+  .tab-icon { width: 19px; height: 19px; }
 }
 
 /* Desktop: a fixed left panel, divided from the content by one hairline.

@@ -32,6 +32,22 @@ function append(el, children) {
   }
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * SVG needs its own namespace. Building these with createElement produces
+ * unknown HTML elements that parse fine and then draw nothing at all.
+ */
+export function svg(tag, props = null, ...children) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value == null || value === false) continue;
+    el.setAttribute(key, value === true ? '' : String(value));
+  }
+  for (const child of children.flat(Infinity)) if (child) el.append(child);
+  return el;
+}
+
 export function clear(el) {
   while (el.firstChild) el.removeChild(el.firstChild);
 }

@@ -77,15 +77,29 @@ function sessionHeader(app, session, done) {
   const isToday = app.ui.date === app.todayISO;
 
   return h('div', null,
+    // One control rather than three loose bits of text: the chevrons had no
+    // chrome at all, so nothing on the screen said the date could be moved.
     h('div', { class: 'row datenav', style: { marginTop: 'var(--s-lg)' } },
-      h('button', { class: 'btn bare tiny', onClick: () => app.shiftDate(-1), title: 'Previous day' }, '‹'),
-      h('span', { class: 'small' }, `${weekday(app.ui.date)} ${shortDate(app.ui.date)}`),
-      h('button', { class: 'btn bare tiny', onClick: () => app.shiftDate(1), title: 'Next day' }, '›'),
+      h('div', { class: 'date-pill' },
+        h('button', {
+          class: 'btn bare tiny date-arrow',
+          onClick: () => app.shiftDate(-1),
+          title: 'Previous day',
+          'aria-label': 'Previous day',
+        }, '‹'),
+        h('span', { class: 'date-now' }, `${weekday(app.ui.date)} ${shortDate(app.ui.date)}`),
+        h('button', {
+          class: 'btn bare tiny date-arrow',
+          onClick: () => app.shiftDate(1),
+          title: 'Next day',
+          'aria-label': 'Next day',
+        }, '›'),
+      ),
       !isToday && h('button', { class: 'btn tiny', onClick: () => app.resetDate() }, 'Back to today'),
     ),
 
     // The one display-scale moment on the screen.
-    h('h1', { class: 'page-title', style: { marginTop: 'var(--s-xs)' } },
+    h('h1', { class: 'page-title', style: { marginTop: 'var(--s-md)' } },
       isToday ? "Today's practice" : humanDate(app.ui.date, app.todayISO)),
     // A number carries this better than a sentence does.
     session.blocks.length > 0 && h('div', { class: 'tally-row' },
@@ -216,7 +230,7 @@ function blockCard(app, block, index) {
             // Only the top-priority card carries the accent, so "where do I
             // start" is answered by the page rather than left to the reader.
             h('button', {
-              class: index === 0 ? 'btn primary' : 'btn',
+              class: `start-btn ${index === 0 ? 'btn primary' : 'btn'}`,
               onClick: () => app.startBlock(block.id),
             }, block.kind === 'batch' ? `Start ${block.items.length} card${block.items.length === 1 ? '' : 's'}` : 'Start'),
           ),

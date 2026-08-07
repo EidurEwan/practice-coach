@@ -154,13 +154,18 @@ mode. They give the agenda, filters and skill lists scannable identity at a glan
 - **Tertiary Ink** (`#66666f`): metadata, timestamps, placeholders.
 - **Ground** (`#edecea`) / **Surface** (`#fbfbf9`): page behind, cards in front. Neither is
   pure white — a full screen of `#fff` is what makes a light UI tiring to read.
-- **Ambient wash**: the ground is not a flat slab. Three very low-alpha radial pools —
-  cool at the top left, warm at the top right, cool again below the fold — are fixed to
-  the viewport behind every pixel of content. Alphas sit around 0.1 and their centres are
-  off-screen, so the effect reads as "warmer over here", never as a shape. It is fixed
-  rather than scrolled so a long page keeps one quiet colour. In light mode the pools only
-  ever *darken* the ground, so they cannot cost text contrast; in dark mode they lighten
-  it, which is why the alpha there is capped at 0.12.
+- **Ambient wash**: the ground is not a flat slab. Three radial pools — cool at the top
+  left, warm at the top right, cool again below the fold — are fixed to the viewport behind
+  every pixel of content. Their centres are off-screen, so the effect reads as "warmer over
+  here", never as a shape, and it is fixed rather than scrolled so a long page keeps one
+  quiet colour.
+
+  The wash moves the ground *away from the ink in both themes*: it darkens the light ground
+  and lightens the dark one, and either way that costs contrast rather than adding it. The
+  alphas are a measured ceiling, not a taste call — 0.16/0.12 in light, 0.12/0.07 in dark.
+  And because the wash is fixed while content scrolls through it, any element can end up
+  over any part of it: the number that matters is the worst point in the viewport, never
+  the point a thing happens to sit at right now.
 - **Sunken** (`#e4e3df`): inset fills — inputs, segmented controls, quiet buttons.
 - **Hairline** (`#dbdad5`): list separators only. Never a card border.
 
@@ -185,6 +190,19 @@ a marker (a dot), a meter fill, or a 4px band along the *top* edge of a card —
 left or right edge, which is the coloured-border card everyone ships. It is never text
 colour, never a solid fill behind text, and never indicates status — which is why it cannot fail contrast or be confused
 with overdue, attention, or steady.
+
+**The Ground Ink Rule.** Only primary and secondary ink may sit directly on the ground,
+and the accent only at display sizes. Tertiary ink clears 4.5:1 on a card but not on the
+washed ground — at any wash strength worth having, it lands around 4.0:1. Tertiary is for
+metadata *inside* a surface, where the card's own fill makes the wash irrelevant. Anything
+small and accent-coloured that must sit on the ground carries an accent-wash chip instead,
+as the onboarding step label does.
+
+**The Button Edge Rule.** A secondary button is a sunken fill, which reads as inset on a
+card but is within a few percent of the ground behind it — on the page background the
+button simply disappeared. Every filled button therefore carries a 1px inset edge. Bare
+buttons and the segments inside a segmented control are the exceptions: both are meant to
+recede until pointed at or selected.
 
 **The Small Dose Rule.** Status colour appears as a dot, a short label, or coloured text —
 never as a filled background panel. A screen with three coloured blocks has lost its
@@ -229,6 +247,13 @@ by colour alone. If two things look similar, one of them moves a full step.
 
 Phone-first, single column. Content is capped at 34rem on phones, 40rem on tablet, and
 sits in the right-hand column of a two-column grid on desktop.
+
+**On phone, chrome earns its height or goes.** The masthead shows the brand and the theme
+control and nothing else — it used to also stamp the date, which the date control directly
+below it repeated, and on an 844px screen that pair cost a tenth of the window. Inset also
+compounds fast: gutter plus card padding plus panel padding reached 120px on a 390px
+screen, which is what forced the rating hints to wrap three lines deep, so a panel nested
+inside a card pulls back toward the card's own edges. The primary action is full-width.
 
 Three navigation tiers: a fixed bottom tab bar below 720px; a horizontal row under the
 masthead from 720px; and a **fixed left side panel from 960px**, 15rem wide, with the
@@ -362,12 +387,32 @@ control labelled in the product's own words ("Why this?", "Show detail") that ex
 place. The interface is expected to look under-explained until asked.
 
 ### Inputs
-Sunken fill, no border at rest, 10px radius, 44px minimum height, 16px font size so iOS
+Sunken fill, no border at rest, 12px radius, 44px minimum height, 16px font size so iOS
 does not zoom. Focus swaps the fill to surface and adds the accent ring.
+
+**Choosing several of a short list uses toggle chips, never a multi-select.** A native
+`<select multiple>` on a phone is a small scrolling box that gives no sign more than one
+option can be picked and needs a precise tap per row. The chips are real checkboxes sharing
+one name, so the form and the accessibility tree are unchanged.
 
 ### Navigation
 Bottom tabs on phone, top row on tablet, left panel on desktop. The active item is accent
-text on an accent-wash pill; inactive is tertiary ink. Counts sit right-aligned as pills.
+text on an accent-wash pill; inactive is tertiary ink.
+
+On phone the bar is a **floating pill**, inset from all three edges and frosted, so content
+passes under it instead of stopping at a strip welded to the window. Each tab is an icon
+over a label, and the active pill is a *single element that slides* between tabs rather
+than four that switch on and off — the tabs are equal-width, so it steps by exactly its own
+width and never needs measuring.
+
+Counts are badges on the icon, not items in the column. In flow they made the two tabs that
+carry a count taller than the two that do not, which put the four labels at three different
+heights. Overdue outranks selected: the tab you are standing on is the one most likely to
+be overdue, and that is exactly when the red must survive.
+
+**Icons** come from the product's own vocabulary, not a generic set: the point you are at
+(a ring around a filled centre), adding to the record (a plus), dates ahead (a calendar),
+and one meter per track (three bars of decreasing length).
 
 ## Do's and Don'ts
 
