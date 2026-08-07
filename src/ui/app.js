@@ -527,6 +527,71 @@ function applyTheme(theme) {
   else root.removeAttribute('data-theme');
 }
 
+// ------------------------------------------------------------------ motion
+
+// A screen animates when the user *arrives* at it, never when it merely
+// re-renders. Without that distinction, rating an item — which re-renders
+// Today — would replay the entrance of the whole page after every single tap.
+let lastScreen = null;
+
+/**
+ * Identifies "the screen the user is looking at". Two renders with the same key
+ * are the same screen updating; a different key is somewhere new. The horizon
+ * and the skill filter are part of the key because changing either replaces the
+ * entire agenda — that is an arrival, not an update.
+ */
+function screenKey() {
+  const { ui } = app;
+  if (app.onboarding) return `onboard:${ui.onboard.step}`;
+  if (ui.route === 'today') return `today:${ui.date}`;
+  if (ui.route === 'upcoming') return `upcoming:${ui.horizon}:${ui.skillFilter || 'all'}`;
+  return `route:${ui.route}`;
+}
+
+// Containers whose children are the real units: a list of practice cards should
+// arrive card by card rather than as one slab.
+const UNROLL = new Set(['slip', 'agenda', 'skill-totals', 'stack', 'ob-body']);
+// Past this many the stagger stops accumulating, so the last card on a long
+// screen is never more than a fifth of a second behind the first.
+const STAGGER_CAP = 7;
+
+/**
+ * Mark the blocks a screen is built from so CSS can bring them in one at a
+ * time. Nothing needs cleaning up afterwards: every render replaces these
+ * nodes, so the class can only ever sit on elements that were just created.
+ */
+function markEntrance(host) {
+  const root = host.firstElementChild;
+  if (!root) return;
+
+  // Onboarding animates only the step's own content — the progress bar and the
+  // footer are fixtures of the flow and should hold still while it advances.
+  const top = root.classList.contains('onboard')
+    ? [...(root.querySelector('.ob-body')?.children || [])]
+    : host.children.length > 1
+      ? [...host.children]
+      : [...root.children];
+
+  let units = [];
+  for (const el of top) {
+    if ([...el.classList].some((c) => UNROLL.has(c))) units.push(...el.children);
+    else units.push(el);
+  }
+
+  // A step or section that is one anonymous wrapper is not one unit — it is a
+  // container the view happened to need. Descend until there is real structure.
+  for (let depth = 0; depth < 2; depth += 1) {
+    const [only] = units;
+    if (units.length !== 1 || only.tagName !== 'DIV' || only.className || only.children.length < 2) break;
+    units = [...only.children];
+  }
+
+  units.forEach((el, i) => {
+    el.classList.add('enter-unit');
+    el.style.setProperty('--i', String(Math.min(i, STAGGER_CAP)));
+  });
+}
+
 // ---------------------------------------------------------------- rendering
 
 function renderChrome() {
@@ -571,7 +636,14 @@ function render() {
   renderChrome();
   showSaveAlert(app.store.saveFailed);
   const view = app.onboarding ? onboardingView : (VIEWS[app.ui.route] || todayView);
-  mount(document.getElementById('view'), view(app));
+  const host = document.getElementById('view');
+  mount(host, view(app));
+
+  const key = screenKey();
+  if (key !== lastScreen) {
+    lastScreen = key;
+    markEntrance(host);
+  }
 
   // Re-rendering destroys the focused node, which would strand a keyboard user
   // after every single review. Put focus back on a sensible anchor.

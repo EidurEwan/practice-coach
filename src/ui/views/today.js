@@ -180,8 +180,16 @@ function blockCard(app, block, index) {
     : block.status === 'plateau' ? 'plateau' : block.status !== 'active' ? 'weak' : null;
 
   return h('div', {
-    class: `slip-row ${index === 0 ? 'is-first' : ''}`,
+    class: `slip-row ${index === 0 ? 'is-first' : ''} ${isActive ? 'is-active' : ''}`,
     ...hueAttrs(app.store.state, block.skill.id),
+    // The card lifts under the pointer, so it has to do something when pressed:
+    // the whole card starts the block, not just the button in it. Controls
+    // inside keep their own behaviour, and an open card is left alone so a
+    // stray click near the rating buttons cannot restart the check.
+    onClick: isActive ? null : (e) => {
+      if (e.target.closest('button, summary, a, input, textarea, select')) return;
+      app.startBlock(block.id);
+    },
   },
     h('div', { class: 'head' },
       dotClass && h('span', { class: `dot ${dotClass}`, title: STATUS_LABEL[block.status] }),

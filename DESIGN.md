@@ -125,6 +125,8 @@ to do; the reasoning is one tap away and never competes with the action.
 - Generous padding and breathing room; density is low by choice
 - Status colour appears as a small dot or short label, never as a filled panel
 - Every explanation is progressive: headline first, reasoning on request
+- Motion is for orientation only: screens arrive, quantities draw themselves, controls
+  answer instantly — and nothing moves twice for the same reason
 
 ## Colors
 
@@ -152,13 +154,30 @@ mode. They give the agenda, filters and skill lists scannable identity at a glan
 - **Tertiary Ink** (`#66666f`): metadata, timestamps, placeholders.
 - **Ground** (`#edecea`) / **Surface** (`#fbfbf9`): page behind, cards in front. Neither is
   pure white — a full screen of `#fff` is what makes a light UI tiring to read.
+- **Ambient wash**: the ground is not a flat slab. Three very low-alpha radial pools —
+  cool at the top left, warm at the top right, cool again below the fold — are fixed to
+  the viewport behind every pixel of content. Alphas sit around 0.1 and their centres are
+  off-screen, so the effect reads as "warmer over here", never as a shape. It is fixed
+  rather than scrolled so a long page keeps one quiet colour. In light mode the pools only
+  ever *darken* the ground, so they cannot cost text contrast; in dark mode they lighten
+  it, which is why the alpha there is capped at 0.12.
 - **Sunken** (`#e4e3df`): inset fills — inputs, segmented controls, quiet buttons.
 - **Hairline** (`#dbdad5`): list separators only. Never a card border.
 
 ### Named Rules
-**The Single Accent Rule.** One accent, one job: the thing to do next. If two things on a
-screen are accent-coloured, one of them is wrong. The categorical skill hues below are not
-accents and do not count against this — they never mark an action.
+**The Single Accent Rule.** One accent, one job: the thing to do next. If two things in
+the *content* are accent-coloured, one of them is wrong. Two things are exempt, because
+neither can be mistaken for an action: the categorical skill hues below, which never mark
+an action, and the two fixed pieces of chrome — the brand mark and the active navigation
+item — which are in the same place on every screen and so read as furniture rather than as
+a choice.
+
+**The Consequence Colour Rule.** The four rating buttons state what will happen if you
+press them, and each states it in the colour of that outcome: green for a longer interval,
+amber for a shortened one, red for a reset, neutral for unchanged. This is the one place
+status colour appears four times at once, and it is allowed because the four are being
+compared — that is the entire purpose of the row. Making them all accent blue, as an
+earlier version did, put four accents on one screen and told the reader nothing.
 
 **The Skill Hue Rule.** Each skill carries one of six categorical hues, assigned by its
 position in the skill list so the first six are always distinct. A hue may only appear as
@@ -228,12 +247,69 @@ lighter surface instead.
 
 ### Shadow Vocabulary
 - **Card rest** (`0 1px 2px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.05)`): every card.
+- **Card lift** (`0 2px 6px rgb(0 0 0 / 0.05), 0 10px 24px rgb(0 0 0 / 0.08)`): what a card
+  rises to under the pointer. Only cards you can actually act on ever lift.
 - **Card raised** (`0 2px 4px rgb(0 0 0 / 0.05), 0 12px 28px rgb(0 0 0 / 0.09)`): the
   active recall panel and the fixed bottom bar, which float above their surroundings.
+- **Accent glow** (`0 4px 14px rgb(59 98 217 / 0.28)`): a coloured shadow cast by the
+  primary button and the brand mark, and by nothing else.
 
 ### Named Rules
 **The No Border Rule.** Cards get a shadow, never a 1px border, and never both. Hairlines
 exist only to separate rows inside a single card.
+
+**The Honest Lift Rule.** Depth is a promise that something happens when you press. A card
+that lifts under the pointer must be clickable in its own right — pressing anywhere on a
+practice card starts it, which is why it may lift; an agenda day is only a container, so
+it holds still. A practice card that is already open is a workspace, not a target, and
+stops lifting.
+
+## Motion
+
+Motion answers two questions and no others: **where did this come from**, and **did my
+action land**. Nothing moves to be charming. What makes the app feel alive is that almost
+everything responds to touch instantly, not that anything performs.
+
+### Durations
+Three, one per job. Anything that does not fit one of them is the wrong length.
+- **130ms** — a control answering a pointer: hover, press, focus, fill swap.
+- **260ms** — one element arriving or opening: the recall panel, a disclosure, a notice.
+- **440ms** — a whole screen arriving, and anything drawing a quantity.
+
+### Easing
+- **`cubic-bezier(0.32, 0.72, 0, 1)`** for state: a firm, unshowy settle.
+- **`cubic-bezier(0.22, 1, 0.36, 1)`** for arrival: an ease-out-quint. Lively with no
+  overshoot — a bounce curve was tried and reads as dated.
+
+### Vocabulary
+- **Rise** — 10px up, fading in. How a block of a screen arrives.
+- **Sweep** — `scaleX` from its own origin. Anything that draws a *quantity*: the capacity
+  bar, the per-skill meters, the coloured band naming a card's skill, the onboarding
+  progress segment.
+- **Pop** — scale from 0.7. Reserved for the day's count, which is the one number on the
+  screen that matters.
+- **Disclose** — 6px down, fading in. Content that opened in place.
+- **Settle** — rise plus a slight scale. The one authored moment: a rating landing.
+- **Ring** — a single expanding ring, once, when the day is finished.
+
+### Named Rules
+**The Arrival Rule.** A screen animates when the user *arrives* at it, never when it
+merely re-renders. This app re-renders on every rating, and replaying the page after each
+tap would make the most-repeated action in the product the most tiring one. "Arrival"
+means the route changed, the onboarding step advanced, the day being viewed changed, or
+the agenda's horizon or skill filter changed — anything that replaces what is on screen.
+
+**The Stagger Cap Rule.** A screen arrives one block at a time, 26ms apart, and the offset
+stops accumulating after seven. Past roughly a fifth of a second the page stops feeling
+responsive and starts feeling slow.
+
+**The Unit Rule.** The things that stagger are the blocks a screen is *made of* — a
+practice card, a day in the agenda, a step's heading — never individual words, rows, or
+list items. A list of practice cards arrives card by card; the cards' contents do not.
+
+**The Reduced Motion Rule.** `prefers-reduced-motion: reduce` collapses every duration
+*and every delay* to nothing. Resetting duration alone is a bug: a staggered element with
+`animation-fill-mode: both` would sit invisible for its delay and then snap in.
 
 ## Shapes
 
@@ -244,11 +320,20 @@ the system is square.
 ## Components
 
 ### Buttons
-- **Primary:** accent fill, white text, 10px radius, 12/20px padding, 44px minimum height.
+- **Primary:** accent fill, white text, 12px radius, 12/20px padding, 44px minimum height.
+  The only element in the system that casts a coloured shadow — that, and not a second
+  accent somewhere, is what makes it read as the one thing to do next.
 - **Secondary:** sunken fill, ink text, same geometry. The default for anything not primary.
 - **Plain:** text only in secondary ink, for dismiss and cancel.
-- **States:** hover darkens the fill by one step; focus draws a 2px accent ring at 2px
-  offset; active presses to 0.98 scale. Focus is never removed.
+- **States:** hover darkens the fill by one step and, on the primary only, lifts it 1px;
+  focus draws a 2px accent ring at 2px offset; active presses to 0.96 scale. Focus is
+  never removed.
+
+### Brand mark
+A 28px rounded square in accent, holding four dots walking out along the expanding spacing
+curve with the last one still faint. It is the product's mechanism drawn at 18px. It sits
+beside the wordmark in the masthead and grows with it on wider screens. Chrome, not an
+action — see the Single Accent Rule.
 
 ### Cards
 20px padding, 14px radius, white surface, card-rest shadow, no border. Cards group
@@ -294,6 +379,8 @@ text on an accent-wash pill; inactive is tertiary ink. Counts sit right-aligned 
 - **Do** keep touch targets at 44px and the primary action inside the thumb arc.
 - **Do** count load in items. Never print an estimated duration for practice.
 - **Do** group any list that spans more than one skill by skill.
+- **Do** animate a screen on arrival, and let it hold still while it updates.
+- **Do** give every quantity — bar, meter, band, progress segment — a sweep from its origin.
 
 ### Don't:
 - **Don't** put a border and a shadow on the same element, or a border on a card at all.
@@ -302,3 +389,6 @@ text on an accent-wash pill; inactive is tertiary ink. Counts sit right-aligned 
 - **Don't** use a skill hue as text colour, as a fill behind text, or to mean status.
 - **Don't** print more than two lines of explanation before the primary action.
 - **Don't** reintroduce serif or monospace faces; one family carries the whole system.
+- **Don't** replay a screen's entrance on a re-render — rating an item must not move the page.
+- **Don't** lift, glow, or otherwise imply depth on something that cannot be acted on.
+- **Don't** stagger rows, words, or list items; only the blocks a screen is made of.
