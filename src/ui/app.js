@@ -134,6 +134,10 @@ const app = {
     onboard: freshOnboard(),
     expandedSkill: null,
     importOpen: false,
+    // Every render rebuilds the DOM, so a <details> would snap shut on the next
+    // action. Starting a card inside the backlog re-renders, so without this the
+    // disclosure closes around the panel the user just opened.
+    backlogOpen: false,
   },
 
   get onboarding() {

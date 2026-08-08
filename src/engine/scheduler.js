@@ -582,7 +582,7 @@ export function buildSession(store, date = todayISO()) {
       type: 'overload',
       message: `${totalUnits} due against your cap of ${capacity}. ${
         overflow.length
-          ? `${overflow.length} non-urgent block(s) can move to tomorrow, bringing today to ~${projected} min.`
+          ? `${overflow.length} ${overflow.length === 1 ? 'item that is not urgent can' : 'items that are not urgent can'} move to tomorrow, leaving ${projected}.`
           : 'Everything due today is overdue or a priority weak point, so none of it should move — consider a longer session or splitting it across the day.'
       }`,
       overflow,
@@ -608,15 +608,45 @@ export function buildSession(store, date = todayISO()) {
   }
 
   const overdueCount = blocks.reduce((n, b) => n + (b.overdueDays > 0 ? 1 : 0), 0);
+  // Blocks, not items: an SRS deck of thirty overdue cards is one block, so the
+  // count the user is told has to be of the things they can actually see.
+  const overdueItemCount = blocks.reduce((n, b) => n + (b.overdueDays > 0 ? b.items.length : 0), 0);
   if (overdueCount > 0) {
     warnings.unshift({
       level: 'warn',
       type: 'overdue',
-      message: `${overdueCount} ${overdueCount === 1 ? 'item is' : 'items are'} overdue. Those come first — the longer they sit, the more they cost.`,
+      message: `${overdueItemCount} ${overdueItemCount === 1 ? 'item is' : 'items are'} overdue. Those come first — the longer they sit, the more they cost.`,
     });
   }
 
-  return { date, blocks, totalUnits, capacity, warnings, actions, modes, overdueCount };
+  // How much of the list is today's actual work. The blocks are already ranked
+  // (overdue → priority-weak → weak → pre-deadline → plateau → normal), so the
+  // focus set is the front of that list up to the day's capacity. Presenting all
+  // of a backlog at once is what makes people abandon it: sixty cards in one
+  // scroll reads as failure, the same sixty behind "today's ten" reads as a plan.
+  let focusUnits = 0;
+  let focusCount = 0;
+  for (const block of blocks) {
+    // Always at least one, even if a single block is bigger than the whole cap.
+    if (focusCount > 0 && focusUnits + block.units > capacity) break;
+    focusUnits += block.units;
+    focusCount += 1;
+  }
+
+  return {
+    date,
+    blocks,
+    totalUnits,
+    capacity,
+    warnings,
+    actions,
+    modes,
+    overdueCount,
+    overdueItemCount,
+    focusCount,
+    focusUnits,
+    deferredCount: blocks.length - focusCount,
+  };
 }
 
 // ---------------------------------------------------------------------------

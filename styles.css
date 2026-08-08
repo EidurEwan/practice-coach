@@ -553,7 +553,9 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   font-variant-numeric: tabular-nums;
 }
 .tally-l { font-size: var(--t-body); color: var(--text-2); line-height: 1.3; }
-.tally-l em { display: block; font-style: normal; font-size: var(--t-footnote); color: var(--text-3); }
+/* Secondary, not tertiary: this line sits on the ground. See the Ground Ink
+   Rule in DESIGN.md — tertiary does not survive the ambient wash out here. */
+.tally-l em { display: block; font-style: normal; font-size: var(--t-footnote); color: var(--text-2); }
 
 /* ---------------------------------------------------------- practice item */
 .slip { display: grid; gap: var(--s-md); margin-top: var(--s-lg); }
@@ -596,6 +598,49 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 }
 .slip-row .meta { color: var(--text-3); font-size: var(--t-footnote); margin-top: 2px; }
 .slip-row .body { margin-top: var(--s-md); }
+
+/* Everything due beyond today's capacity, folded away. Deliberately quiet: a
+   backlog you cannot clear today is information, not an alarm. */
+.backlog { margin-top: var(--s-lg); }
+.backlog > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  cursor: pointer;
+  list-style: none;
+  min-height: 44px;
+  padding: var(--s-md) var(--s-lg);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-rest);
+  color: var(--text-2);
+  font-size: var(--t-callout);
+  transition: box-shadow var(--dur-2) var(--ease);
+}
+.backlog > summary::-webkit-details-marker { display: none; }
+.backlog > summary::after {
+  content: "";
+  flex: none;
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--dur-2) var(--ease-lively);
+}
+.backlog[open] > summary::after { transform: translateY(1px) rotate(225deg); }
+.backlog-n {
+  flex: none;
+  font-family: var(--sans-display);
+  font-size: var(--t-headline);
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.backlog-body { animation: disclose var(--dur-2) var(--ease-lively) both; }
+.backlog-body > p { margin-top: var(--s-md); max-width: var(--measure); }
+@media (hover: hover) { .backlog > summary:hover { box-shadow: var(--shadow-lift); } }
 
 /* A dot, not a panel: the whole dose of status colour on a row. */
 .dot {

@@ -58,15 +58,52 @@ export function todayView(app) {
         )
       : session.blocks.length === 0
         ? doneCard(app, done)
-        : h('div', { class: 'slip' },
-            session.blocks.map((block, i) => blockCard(app, block, i)),
-          ),
+        : sessionList(app, session),
 
     session.blocks.length > 0 && h('div', null,
       h('div', { class: 'row', style: { marginTop: 'var(--s-md)' } },
         h('button', { class: 'btn tiny', onClick: () => app.go('log') }, 'Log something new'),
       ),
       h('div', { style: { marginTop: 'var(--s-md)' } }, cardOutput(app, session)),
+    ),
+  );
+}
+
+/**
+ * Today's work, then the backlog behind a disclosure.
+ *
+ * Rendering an entire backlog as one scrolling list is what makes people
+ * abandon it — sixty cards reads as failure, where the same sixty behind
+ * "today's twelve" reads as a plan. The engine ranks the blocks and decides
+ * where the day's capacity runs out; this only draws the line.
+ */
+function sessionList(app, session) {
+  const focus = session.blocks.slice(0, session.focusCount);
+  const rest = session.blocks.slice(session.focusCount);
+  if (rest.length === 0) {
+    return h('div', { class: 'slip' }, focus.map((block, i) => blockCard(app, block, i)));
+  }
+
+  // Forced open while the card being worked on lives down here, so the section
+  // cannot close over an active recall panel.
+  const activeInBacklog = rest.some((b) => b.id === app.ui.activeBlock);
+
+  return h('div', null,
+    h('div', { class: 'slip' }, focus.map((block, i) => blockCard(app, block, i))),
+    h('details', {
+      class: 'backlog',
+      open: app.ui.backlogOpen || activeInBacklog,
+      onToggle: (e) => { app.ui.backlogOpen = e.target.open; },
+    },
+      h('summary', null,
+        h('span', { class: 'backlog-n' }, String(rest.length)),
+        h('span', null, `more due, beyond today's ${session.capacity}`),
+      ),
+      h('div', { class: 'backlog-body' },
+        h('p', { class: 'small muted' },
+          'Ranked hardest-first. Clearing the ones above is the whole job — these move themselves up tomorrow.'),
+        h('div', { class: 'slip' }, rest.map((block, i) => blockCard(app, block, session.focusCount + i))),
+      ),
     ),
   );
 }
@@ -101,11 +138,13 @@ function sessionHeader(app, session, done) {
     // The one display-scale moment on the screen.
     h('h1', { class: 'page-title', style: { marginTop: 'var(--s-md)' } },
       isToday ? "Today's practice" : humanDate(app.ui.date, app.todayISO)),
-    // A number carries this better than a sentence does.
+    // A number carries this better than a sentence does — and the number has to
+    // be the day's work, not the size of the backlog behind it.
     session.blocks.length > 0 && h('div', { class: 'tally-row' },
-      h('span', { class: 'tally-n' }, String(session.blocks.length)),
+      h('span', { class: 'tally-n' }, String(session.focusCount)),
       h('span', { class: 'tally-l' },
-        session.blocks.length === 1 ? 'thing to review' : 'things to review',
+        session.focusCount === 1 ? 'thing to review' : 'things to review',
+        session.deferredCount > 0 && h('em', null, `${session.deferredCount} more waiting`),
         done > 0 && h('em', null, `${done} done already`),
       ),
     ),

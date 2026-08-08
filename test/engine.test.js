@@ -699,3 +699,71 @@ test('practice cards render in the spec output format', () => {
   assert.doesNotMatch(session, /Blind recall/,
     'the blind-recall step was removed; the card must not still instruct it');
 });
+
+// --------------------------------------------------------------- backlog triage
+
+test('a backlog is split into the day capacity and the rest, ranked', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning' });
+  store.settings.dailyCapacityItems = 3;
+
+  // Four badly overdue, eight due today: far past any one day's capacity.
+  for (let i = 0; i < 4; i += 1) {
+    logNewItem(store, skill.id, { title: `Stale ${i}`, firstExposure: D0 });
+  }
+  for (let i = 0; i < 8; i += 1) {
+    logNewItem(store, skill.id, { title: `Fresh ${i}`, firstExposure: addDays(D0, 20) });
+  }
+
+  const date = addDays(D0, 21);
+  const session = buildSession(store, date);
+
+  assert.ok(session.blocks.length > session.capacity, 'expected a real backlog');
+  assert.ok(session.focusCount <= session.capacity, 'focus set never exceeds the cap');
+  assert.equal(session.deferredCount, session.blocks.length - session.focusCount);
+
+  // The focus set is the front of the ranked list, so nothing overdue is
+  // pushed behind something that is merely due.
+  const focus = session.blocks.slice(0, session.focusCount);
+  const rest = session.blocks.slice(session.focusCount);
+  const worstInFocus = Math.max(...focus.map((b) => b.rank));
+  const bestInRest = Math.min(...rest.map((b) => b.rank));
+  assert.ok(worstInFocus <= bestInRest, 'focus set holds the highest-priority blocks');
+  assert.ok(focus.every((b) => b.overdueDays > 0), 'overdue work comes first');
+});
+
+test('the focus set always offers at least one block', () => {
+  const { store, skill } = setup({ name: 'Spanish', genre: 'language' });
+  store.settings.dailyCapacityItems = 1;
+  // One deck of 60 cards is 3 work units — more than the whole cap on its own.
+  for (let i = 0; i < 60; i += 1) {
+    logNewItem(store, skill.id, { title: `word ${i}`, firstExposure: D0 });
+  }
+  const session = buildSession(store, addDays(D0, 1));
+  assert.ok(session.totalUnits > session.capacity);
+  assert.equal(session.focusCount, 1, 'a day is never empty just because one block is large');
+});
+
+test('the overdue warning counts items, not blocks', () => {
+  const { store, skill } = setup({ name: 'Spanish', genre: 'language' });
+  for (let i = 0; i < 9; i += 1) {
+    logNewItem(store, skill.id, { title: `word ${i}`, firstExposure: D0 });
+  }
+  // One skill's cards collapse to a single block, so a block count would say 1.
+  const session = buildSession(store, addDays(D0, 10));
+  assert.equal(session.overdueCount, 1, 'one block');
+  assert.equal(session.overdueItemCount, 9, 'nine items');
+  const overdue = session.warnings.find((w) => w.type === 'overdue');
+  assert.match(overdue.message, /^9 items are overdue/);
+});
+
+test('the overload warning never reports work as minutes', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning' });
+  store.settings.dailyCapacityItems = 2;
+  for (let i = 0; i < 6; i += 1) {
+    logNewItem(store, skill.id, { title: `Topic ${i}`, firstExposure: D0 });
+  }
+  const overload = buildSession(store, addDays(D0, 1)).warnings.find((w) => w.type === 'overload');
+  assert.ok(overload, 'expected an overload warning');
+  assert.doesNotMatch(overload.message, /\bmin\b|minute/, 'load is counted in items');
+  assert.doesNotMatch(overload.message, /\(s\)/, 'plurals are written out');
+});
