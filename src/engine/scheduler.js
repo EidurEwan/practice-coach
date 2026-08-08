@@ -157,7 +157,7 @@ export function applyConfusableSpacing(store, item) {
   for (const partner of confusablePartners(store, item.id)) {
     if (partner.archived || partner.dueDate !== item.dueDate) continue;
 
-    const bothStable = stability(item) >= 2 && stability(partner) >= 2;
+    const bothStable = stability(store, item) >= 2 && stability(store, partner) >= 2;
     if (bothStable) {
       flags.push({
         type: 'discrimination-drill',
@@ -167,7 +167,7 @@ export function applyConfusableSpacing(store, item) {
     }
 
     // Push whichever is less established so each becomes independently solid.
-    const target = stability(item) <= stability(partner) ? item : partner;
+    const target = stability(store, item) <= stability(store, partner) ? item : partner;
     target.dueDate = addDays(target.dueDate, 1);
     flags.push({
       type: 'confusable-separated',
@@ -380,7 +380,6 @@ export function reviewItem(store, itemId, options = {}) {
     ease: item.ease,
     format: currentFormat(item, skill),
   };
-  item.history.push(entry);
   store.reviews.push({ id: newId('rv'), itemId: item.id, skillId: skill.id, ...entry });
 
   return {
@@ -663,14 +662,14 @@ export function buildSession(store, date = todayISO()) {
     const b = store.items.find((i) => i.id === pair.b);
     if (!a || !b || !sessionIds.has(a.id) || !sessionIds.has(b.id)) continue;
 
-    if (stability(a) >= 2 && stability(b) >= 2) {
+    if (stability(store, a) >= 2 && stability(store, b) >= 2) {
       warnings.push({
         level: 'info',
         type: 'discrimination-drill',
         message: `Discrimination drill: "${a.title}" and "${b.title}" are confusable and both stable, so practise them back to back with the labels hidden — the point is telling them apart.`,
       });
     } else {
-      const later = stability(a) <= stability(b) ? a : b;
+      const later = stability(store, a) <= stability(store, b) ? a : b;
       warnings.push({
         level: 'warn',
         type: 'confusable-collision',

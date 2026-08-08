@@ -3,6 +3,7 @@
 
 import { emptyStore, STORE_VERSION } from './engine/model.js';
 
+
 const KEY = 'practice-coach:v1';
 
 export function memoryAdapter(initial = null) {
@@ -94,14 +95,51 @@ export function migrate(raw) {
     formatIndex: 0,
     blockedSessions: 0,
     archived: false,
-    history: [],
     ...item,
   }));
+  return normaliseReviews(store);
+}
+
+/**
+ * Store v1 wrote every review twice — into `item.history` and into
+ * `store.reviews`. About a third of the payload was the duplicate, and two
+ * copies of one fact is a divergence waiting to happen the moment anything
+ * syncs. `store.reviews` is now the only record.
+ *
+ * The two were appended in lockstep, so an old store's reviews are already
+ * complete and history is simply dropped. Anything history holds *beyond* what
+ * reviews has is recovered rather than thrown away — losing a review would
+ * silently corrupt the schedule that depends on it.
+ */
+function normaliseReviews(store) {
+  const counts = new Map();
+  for (const r of store.reviews) counts.set(r.itemId, (counts.get(r.itemId) || 0) + 1);
+
+  let recovered = 0;
+  for (const item of store.items) {
+    const history = Array.isArray(item.history) ? item.history : [];
+    const known = counts.get(item.id) || 0;
+    for (const entry of history.slice(known)) {
+      store.reviews.push({
+        id: `rv_recovered_${item.id}_${recovered += 1}`,
+        itemId: item.id,
+        skillId: item.skillId,
+        ...entry,
+      });
+    }
+    delete item.history;
+  }
+
+  // Recovered entries land at the end; the log is read oldest-first.
+  if (recovered > 0) {
+    store.reviews.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }
   return store;
 }
 
 export function createStore(adapter) {
-  let state = migrate(adapter.read());
+  const raw = adapter.read();
+  let state = migrate(raw);
   let saveFailed = false;
   const listeners = new Set();
 
@@ -111,6 +149,12 @@ export function createStore(adapter) {
     saveFailed = adapter.write(state) === false;
     return !saveFailed;
   }
+
+  // Commit a migration straight away rather than waiting for the user to
+  // happen to write something. A migration that deletes a field should not sit
+  // half-applied — normalised in memory, still duplicated on disk — for however
+  // long it takes them to record their next review.
+  if (raw && raw.version !== STORE_VERSION) persist();
 
   return {
     get state() {

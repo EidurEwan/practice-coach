@@ -4,6 +4,7 @@
 import { humanDate, todayISO } from './dates.js';
 import { GENRE_LABEL } from './genres.js';
 import { practiceMethod } from './methods.js';
+import { lastReview } from './model.js';
 import { buildSession, dueItems } from './scheduler.js';
 
 function genreTag(skill) {
@@ -47,7 +48,7 @@ export function formatLogCard(store, { skill, item, flags = [], projection = [] 
 export function formatReviewCard(store, result, date = todayISO()) {
   const { item, skill, flags, projection } = result;
   const lines = [];
-  const last = item.history[item.history.length - 1];
+  const last = lastReview(store, item.id);
 
   lines.push(`📌 Reviewed: ${item.title} (${genreTag(skill)}${item.subSkill ? `, ${item.subSkill}` : ''}) — rated ${last.rating}`);
   lines.push(

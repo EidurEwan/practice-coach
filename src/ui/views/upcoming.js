@@ -1,7 +1,7 @@
 import { h } from '../dom.js';
 import { humanDate, shortDate, todayISO, weekday } from '../../engine/dates.js';
 import { GENRE_LABEL } from '../../engine/genres.js';
-import { STATUS_LABEL, getSkill, itemStatus } from '../../engine/model.js';
+import { STATUS_LABEL, getSkill, itemStatus, reviewCounts } from '../../engine/model.js';
 import { HORIZONS, projectItem, projectLoad, activeSkills } from '../../engine/scheduler.js';
 import { hueAttrs } from '../hues.js';
 
@@ -222,6 +222,9 @@ function statusDot(item) {
 
 function itemsBySkill(app, horizon, activeSkill) {
   const { state } = app.store;
+  // Counted once for the whole page rather than per row: this draws one row
+  // per tracked item, and each would otherwise scan the entire review log.
+  const counts = reviewCounts(state);
   const groups = new Map();
 
   for (const item of state.items) {
@@ -250,15 +253,16 @@ function itemsBySkill(app, horizon, activeSkill) {
           items
             .slice()
             .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-            .map((item) => itemRow(app, item, horizon)),
+            .map((item) => itemRow(app, item, horizon, counts)),
         ),
       )),
   );
 }
 
-function itemRow(app, item, horizon) {
+function itemRow(app, item, horizon, counts) {
   const status = itemStatus(item);
   const overdue = item.dueDate < app.ui.date;
+  const reviewCount = counts.get(item.id) || 0;
 
   return h('details', { class: 'item-row' },
     h('summary', null,
@@ -273,7 +277,7 @@ function itemRow(app, item, horizon) {
       [
         item.subSkill,
         `interval ${item.intervalDays}d`,
-        `${item.history.length} review${item.history.length === 1 ? '' : 's'} so far`,
+        `${reviewCount} review${reviewCount === 1 ? '' : 's'} so far`,
         status !== 'active' ? STATUS_LABEL[status] : null,
       ].filter(Boolean).join(' · ')),
     chainFor(app, item, horizon),

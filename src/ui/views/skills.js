@@ -1,7 +1,7 @@
 import { h, copyText, mount } from '../dom.js';
 import { humanDate, todayISO } from '../../engine/dates.js';
 import { GENRE_LABEL, GENRES, detectGenre, methodStack } from '../../engine/genres.js';
-import { STATUS_LABEL, itemStatus, itemsForSkill } from '../../engine/model.js';
+import { STATUS_LABEL, itemStatus, itemsForSkill, reviewCounts } from '../../engine/model.js';
 import { activeSkills, archivedSkills, skillMode, skillSuspended } from '../../engine/scheduler.js';
 import { currentFormat } from '../../engine/methods.js';
 import { SCORE_OPTIONS, previewCurves, verdictFor } from '../../engine/diagnostic.js';
@@ -455,6 +455,7 @@ function skillControls(app, skill, suspended) {
 
 function itemTable(app, skill, items) {
   const sorted = items.slice().sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const counts = reviewCounts(app.store.state);
   return h('table', { class: 'items', style: { marginTop: 'var(--s-sm)' } },
     h('thead', null, h('tr', null,
       h('th', null, skill.genre === 'memorization' || skill.genre === 'language' ? 'Item' : 'Topic'),
@@ -485,7 +486,7 @@ function itemTable(app, skill, items) {
       h('td', { class: 'num', 'data-label': 'Interval' }, `${item.intervalDays}d`),
       h('td', { class: 'num', 'data-label': 'Ease' }, item.ease.toFixed(2)
         + (item.difficultyPenalty < 1 ? ` ·${Math.round(item.difficultyPenalty * 100)}%` : '')),
-      h('td', { class: 'num', 'data-label': 'Reviews' }, String(item.history.length)),
+      h('td', { class: 'num', 'data-label': 'Reviews' }, String(counts.get(item.id) || 0)),
       h('td', { 'data-label': 'Status' }, h('span', {
         class: `badge ${statusClass(itemStatus(item))}`,
       }, STATUS_LABEL[itemStatus(item)])),

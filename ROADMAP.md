@@ -105,7 +105,7 @@ theme with the ambient wash composited at its worst point.
    erase moved behind archiving. **Search still outstanding** — starts to matter
    past ~60 items.
 4. ~~**Bulk paste for all genres** + continuous session flow~~ — done.
-5. **Normalise the review log** — single source of truth, before sync exists.
+5. ~~**Normalise the review log**~~ — done. store.reviews is the only record; v1 stores migrate on load, 37.8% smaller.
 6. **Memoize `buildSession`**, patch instead of remount.
 7. **Coverage / readiness** — needs a `notStarted` item state and a store
    migration. The number a student checks daily and a parent would pay for.

@@ -10,7 +10,10 @@ export function newId(prefix = 'x') {
   return `${prefix}_${Date.now().toString(36)}_${counter.toString(36)}`;
 }
 
-export const STORE_VERSION = 1;
+// 2: reviews live only in store.reviews. They used to be written twice, once
+// there and once into item.history, which wasted about a third of the payload
+// and left two copies of one fact for a sync to disagree about.
+export const STORE_VERSION = 2;
 
 export function emptyStore() {
   return {
@@ -97,8 +100,27 @@ export function createItem(skill, input) {
     formatIndex: 0,
     blockedSessions: 0,
     archived: false,
-    history: [],
   };
+}
+
+/** Every review of one item, oldest first. store.reviews is the only record. */
+export function reviewsFor(store, itemId) {
+  return store.reviews.filter((r) => r.itemId === itemId);
+}
+
+export function lastReview(store, itemId) {
+  const all = reviewsFor(store, itemId);
+  return all.length ? all[all.length - 1] : null;
+}
+
+/**
+ * How many reviews each item has, in one pass. A table of a hundred topics
+ * asking the question a hundred times would scan the whole log each time.
+ */
+export function reviewCounts(store) {
+  const counts = new Map();
+  for (const r of store.reviews) counts.set(r.itemId, (counts.get(r.itemId) || 0) + 1);
+  return counts;
 }
 
 // A syllabus pasted out of a PDF or an exam-board spec arrives numbered, so the
@@ -154,8 +176,8 @@ export const STATUS_LABEL = {
 };
 
 /** Reviews that did not end in failure — a rough proxy for "independently solid". */
-export function stability(item) {
-  return item.history.filter((h) => h.rating !== 'failed').length;
+export function stability(store, item) {
+  return reviewsFor(store, item.id).filter((r) => r.rating !== 'failed').length;
 }
 
 export function linkConfusable(store, aId, bId, note = '') {

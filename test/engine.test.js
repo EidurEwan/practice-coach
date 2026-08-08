@@ -10,7 +10,7 @@ import {
   sm2Update,
 } from '../src/engine/curve.js';
 import { detectGenre, usesPerItemSRS, requiresInterleaving } from '../src/engine/genres.js';
-import { createSkill, emptyStore, itemStatus, linkConfusable, parseBulkInput } from '../src/engine/model.js';
+import { createSkill, emptyStore, itemStatus, linkConfusable, parseBulkInput, reviewsFor, stability } from '../src/engine/model.js';
 import {
   buildSession,
   canReview,
@@ -38,6 +38,7 @@ import {
   skillMode,
 } from '../src/engine/scheduler.js';
 import { currentFormat } from '../src/engine/methods.js';
+import { migrate } from '../src/store.js';
 import { formatLogCard, formatSessionCard } from '../src/engine/card.js';
 
 const D0 = '2026-01-05';
@@ -378,8 +379,12 @@ test('confusable pairs are separated while shaky, then deliberately collided', (
   assert.ok(b.flags.some((f) => f.type === 'confusable-separated'));
 
   // Once both are established, a collision becomes a discrimination drill.
-  a.item.history = [{ rating: 'ok' }, { rating: 'ok' }];
-  b.item.history = [{ rating: 'ok' }, { rating: 'ok' }];
+  for (const it of [a.item, b.item]) {
+    store.reviews.push(
+      { id: `rv_${it.id}_1`, itemId: it.id, skillId: skill.id, date: D0, rating: 'ok' },
+      { id: `rv_${it.id}_2`, itemId: it.id, skillId: skill.id, date: D0, rating: 'ok' },
+    );
+  }
   b.item.dueDate = a.item.dueDate;
 
   const session = buildSession(store, a.item.dueDate);
@@ -491,12 +496,18 @@ test('review history is what drives the schedule, so it survives a reload', () =
   const reloaded = JSON.parse(JSON.stringify(store));
   const restored = reloaded.items[0];
 
-  assert.equal(restored.history.length, 3);
   assert.equal(restored.ease, item.ease);
   assert.equal(restored.intervalDays, item.intervalDays);
   assert.equal(restored.dueDate, item.dueDate);
+
+  // One record, not two. The log is the only place a review is written.
   assert.equal(reloaded.reviews.length, 3);
-  assert.ok(restored.history.every((h) => 'recallAttempt' in h), 'recall attempts are stored');
+  assert.equal(restored.history, undefined, 'no second copy on the item');
+  assert.equal(reviewsFor(reloaded, item.id).length, 3);
+  assert.ok(reviewsFor(reloaded, item.id).every((r) => 'recallAttempt' in r),
+    'recall attempts are stored');
+  assert.ok(reviewsFor(reloaded, item.id).every((r) => r.skillId === skill.id),
+    'each review knows its skill, so nothing has to be joined through the item');
 });
 
 // ---------------------------------------------------------------------------
@@ -1022,4 +1033,52 @@ test('empty and whitespace-only input yields nothing', () => {
   assert.deepEqual(parseBulkInput('', { perItem: false }), []);
   assert.deepEqual(parseBulkInput('\n  \n\t\n', { perItem: false }), []);
   assert.deepEqual(parseBulkInput('  |  |  ', { perItem: true }), []);
+});
+
+// ------------------------------------------------------- store v1 -> v2 migration
+
+test('a v1 store keeps its reviews and loses the duplicate copy', () => {
+  const { store, skill } = setup({ name: 'Spanish', genre: 'language' });
+  const { item } = logNewItem(store, skill.id, { title: 'el gato', firstExposure: D0 });
+  drill(store, item.id, ['ok', 'easy', 'hard']);
+
+  // Rebuild what v1 wrote: the same three reviews in both places.
+  const v1 = JSON.parse(JSON.stringify(store));
+  v1.version = 1;
+  v1.items[0].history = v1.reviews.map(({ id, itemId, skillId, ...entry }) => entry);
+  assert.equal(v1.items[0].history.length, 3);
+
+  const migrated = migrate(v1);
+  assert.equal(migrated.version, 2);
+  assert.equal(migrated.reviews.length, 3, 'not doubled');
+  assert.equal(migrated.items[0].history, undefined, 'the duplicate is gone');
+  // ok / easy / hard are all successful retrievals; only "failed" is not.
+  assert.equal(stability(migrated, migrated.items[0]), 3, 'three non-failed reviews');
+});
+
+test('migration recovers reviews that only exist on the item', () => {
+  const { store, skill } = setup({ name: 'Spanish', genre: 'language' });
+  const { item } = logNewItem(store, skill.id, { title: 'el gato', firstExposure: D0 });
+  drill(store, item.id, ['ok', 'easy', 'hard']);
+
+  const v1 = JSON.parse(JSON.stringify(store));
+  v1.items[0].history = v1.reviews.map(({ id, itemId, skillId, ...entry }) => entry);
+  // A store whose log lost its tail — dropping history would lose the reviews.
+  v1.reviews = v1.reviews.slice(0, 1);
+
+  const migrated = migrate(v1);
+  assert.equal(migrated.reviews.length, 3, 'the missing two are recovered');
+  assert.ok(migrated.reviews.every((r) => r.itemId === item.id && r.skillId === skill.id),
+    'recovered entries carry their item and skill');
+  assert.deepEqual(migrated.reviews.map((r) => r.rating), ['ok', 'easy', 'hard'],
+    'and stay in order');
+});
+
+test('migrating a store with no reviews at all is a no-op', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning' });
+  logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+  const migrated = migrate(JSON.parse(JSON.stringify(store)));
+  assert.equal(migrated.reviews.length, 0);
+  assert.equal(migrated.items.length, 1);
+  assert.equal(migrated.items[0].history, undefined);
 });
