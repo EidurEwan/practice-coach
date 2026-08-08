@@ -4,7 +4,7 @@
 //
 // Bump CACHE when shipping: the old cache is dropped on activate.
 
-const CACHE = 'practice-coach-v6';
+const CACHE = 'practice-coach-v7';
 
 const SHELL = [
   './',

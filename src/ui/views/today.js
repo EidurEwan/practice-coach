@@ -39,6 +39,7 @@ export function todayView(app) {
   const noItems = store.state.items.length === 0;
 
   return h('div', null,
+    session.windDown.length > 0 && windDownCard(app, session),
     sessionHeader(app, session, done),
     ui.notice && h('div', { class: 'notice' },
       h('div', { class: `msg ${ui.notice.level}` },
@@ -66,6 +67,45 @@ export function todayView(app) {
       ),
       h('div', { style: { marginTop: 'var(--s-md)' } }, cardOutput(app, session)),
     ),
+  );
+}
+
+/**
+ * Shown once a target date has passed. The exam is the end of something, and
+ * the app used to carry on demanding daily work on a finished syllabus with no
+ * exit but a delete that destroyed the history. Nothing here is scheduled any
+ * more; the point of the card is to say so, show what the work amounted to, and
+ * keep the way back open in one tap.
+ */
+function windDownCard(app, session) {
+  const many = session.windDown.length > 1;
+  const totalReviews = session.windDown.reduce((n, w) => n + w.reviews, 0);
+
+  return h('div', { class: 'card wind-down' },
+    h('div', { class: 'wind-mark', 'aria-hidden': 'true' }, '✓'),
+    h('h3', null, many ? 'That is your exams done' : `${session.windDown[0].skill.name} is done`),
+    h('p', { class: 'muted' },
+      `${totalReviews} review${totalReviews === 1 ? '' : 's'} logged. `
+      + 'Nothing from these is scheduled any more, and none of it is deleted.'),
+
+    h('ul', { class: 'wind-list' }, session.windDown.map((w) => h('li', null,
+      h('div', null,
+        h('span', { class: 'wind-name' }, w.skill.name),
+        // Not humanDate: it renders a past date as "12d overdue", which is
+        // right for a review and nonsense for an exam that has been sat.
+        h('span', { class: 'small faint' },
+          ` · sat ${weekday(w.finishedOn)} ${shortDate(w.finishedOn)}`
+          + (w.daysSince > 0 ? `, ${w.daysSince} day${w.daysSince === 1 ? '' : 's'} ago` : '')
+          + ` · ${w.topics} topic${w.topics === 1 ? '' : 's'}`),
+      ),
+      h('button', {
+        class: 'btn tiny',
+        onClick: () => app.resumeSkill(w.skill.id),
+      }, 'Keep practising'),
+    ))),
+
+    h('p', { class: 'small faint' },
+      'Set a new target date under Skills when the next one is booked.'),
   );
 }
 

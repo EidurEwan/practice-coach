@@ -2,7 +2,7 @@ import { h, copyText, mount } from '../dom.js';
 import { humanDate, todayISO } from '../../engine/dates.js';
 import { GENRE_LABEL, GENRES, detectGenre, methodStack } from '../../engine/genres.js';
 import { STATUS_LABEL, itemStatus, itemsForSkill } from '../../engine/model.js';
-import { skillMode } from '../../engine/scheduler.js';
+import { skillMode, skillSuspended } from '../../engine/scheduler.js';
 import { currentFormat } from '../../engine/methods.js';
 import { SCORE_OPTIONS, previewCurves, verdictFor } from '../../engine/diagnostic.js';
 import { calibrationFromDiagnostic } from '../../engine/curve.js';
@@ -292,8 +292,9 @@ function skillCard(app, skill) {
   const stack = methodStack(skill.genre, skill.physicalType);
   const mode = skillMode(skill, app.ui.date, app.store.state.settings.preDeadlineWindowDays);
   const expanded = app.ui.expandedSkill === skill.id;
+  const suspended = skillSuspended(skill, app.ui.date);
 
-  return h('div', { class: 'card', ...hueAttrs(app.store.state, skill.id) },
+  return h('div', { class: `card ${suspended ? 'is-paused' : ''}`, ...hueAttrs(app.store.state, skill.id) },
     h('div', { class: 'spread' },
       h('div', null,
         h('div', { class: 'row' },
@@ -303,7 +304,11 @@ function skillCard(app, skill) {
             GENRE_LABEL[skill.genre] + (skill.physicalType ? ` · ${skill.physicalType}` : '')),
           mode.mode === 'pre-deadline' && h('span', { class: 'badge deadline' },
             `${mode.daysToTarget}d to target`),
-          mode.mode === 'past-deadline' && h('span', { class: 'badge' }, 'past target'),
+          // "Paused" says what is actually happening; "past target" only says
+          // what the calendar did. They never both apply.
+          suspended
+            ? h('span', { class: 'badge' }, 'paused')
+            : mode.mode === 'past-deadline' && h('span', { class: 'badge ok' }, 'past target · still on'),
         ),
         h('div', { class: 'small faint' },
           [
@@ -337,12 +342,44 @@ function skillCard(app, skill) {
     skill.diagnostic && h('div', { class: 'small faint', style: { marginTop: 'var(--s-xs)' } },
       `Diagnostic ${skill.diagnostic.takenAt}: ${skill.diagnostic.verdict}`),
 
+    expanded && skillControls(app, skill, suspended),
+
     expanded && h('ul', { class: 'method-stack', style: { marginTop: 'var(--s-md)' } },
       stack.primary.map((m) => h('li', null, m))),
 
     expanded && (items.length === 0
       ? h('p', { class: 'small faint', style: { marginTop: 'var(--s-sm)' } }, 'Nothing logged in this track yet.')
       : itemTable(app, skill, items)),
+  );
+}
+
+/**
+ * Target date and pause, together, because they are the same decision: a
+ * subject runs towards a date, and when that date passes it stops. Setting a
+ * new date is how a student comes back next September, so it cannot be buried.
+ */
+function skillControls(app, skill, suspended) {
+  const input = h('input', {
+    type: 'date',
+    value: skill.targetDate || '',
+    onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } },
+  });
+  const save = () => app.setSkillTarget(skill.id, input.value);
+
+  return h('div', { class: 'skill-controls' },
+    h('label', { class: 'field', style: { margin: 0 } },
+      h('span', { class: 'lbl' }, 'Target date'),
+      input,
+      h('span', { class: 'hint' }, suspended
+        ? 'A new date puts this subject back on the schedule.'
+        : 'Practice runs timed and exam-format for the last three weeks before it.'),
+    ),
+    h('div', { class: 'row', style: { marginTop: 'var(--s-md)' } },
+      h('button', { class: 'btn tiny primary', onClick: save }, 'Save date'),
+      suspended
+        ? h('button', { class: 'btn tiny', onClick: () => app.resumeSkill(skill.id) }, 'Resume now')
+        : h('button', { class: 'btn tiny', onClick: () => app.suspendSkill(skill.id) }, 'Pause'),
+    ),
   );
 }
 

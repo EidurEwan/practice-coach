@@ -19,8 +19,14 @@ import {
   previewRating,
   projectItem,
   projectLoad,
+  overdueItems,
+  dueBlockCount,
+  dueItems,
   redistribute,
   restoreSchedule,
+  setSkillSuspended,
+  setTargetDate,
+  skillSuspended,
   snapshotSchedule,
   reviewItem,
   skillMode,
@@ -766,4 +772,108 @@ test('the overload warning never reports work as minutes', () => {
   assert.ok(overload, 'expected an overload warning');
   assert.doesNotMatch(overload.message, /\bmin\b|minute/, 'load is counted in items');
   assert.doesNotMatch(overload.message, /\(s\)/, 'plurals are written out');
+});
+
+// ------------------------------------------------------------- season wind-down
+
+test('a skill stops scheduling once its target date has passed', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning', targetDate: addDays(D0, 30) });
+  logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+
+  const before = addDays(D0, 29);
+  assert.ok(!skillSuspended(skill, before), 'still running before the exam');
+  assert.ok(dueItems(store, before).length > 0);
+
+  const after = addDays(D0, 31);
+  assert.ok(skillSuspended(skill, after), 'suspended once the date has passed');
+  assert.equal(dueItems(store, after).length, 0, 'nothing from it is due any more');
+  assert.equal(overdueItems(store, after).length, 0);
+  assert.equal(buildSession(store, after).blocks.length, 0);
+});
+
+test('suspension hides the subject from the forecast too', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning', targetDate: addDays(D0, 30) });
+  logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+
+  assert.ok(projectLoad(store, addDays(D0, 29), 60).totalReviews > 0);
+  assert.equal(projectLoad(store, addDays(D0, 31), 60).totalReviews, 0,
+    'a sat exam is not put back on the calendar');
+});
+
+test('the wind-down names the finished subject and keeps its work', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning', targetDate: addDays(D0, 30) });
+  const { item } = logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+  reviewItem(store, item.id, { rating: 'ok', date: item.dueDate });
+
+  const session = buildSession(store, addDays(D0, 31));
+  assert.equal(session.windDown.length, 1);
+  assert.equal(session.windDown[0].skill.id, skill.id);
+  assert.equal(session.windDown[0].reviews, 1, 'history is intact');
+  assert.equal(session.windDown[0].topics, 1);
+  assert.equal(store.items.length, 1, 'nothing is deleted');
+});
+
+test('resuming is a clear undo, and does not reappear in the wind-down', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning', targetDate: addDays(D0, 30) });
+  logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+  const after = addDays(D0, 31);
+
+  setSkillSuspended(store, skill.id, false);
+  assert.ok(!skillSuspended(skill, after), 'the override beats the date');
+  assert.ok(dueItems(store, after).length > 0, 'back on the schedule');
+  assert.equal(buildSession(store, after).windDown.length, 0, 'no longer asked about');
+});
+
+test('a new target date starts a new season and clears the override', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning', targetDate: addDays(D0, 30) });
+  logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+  const after = addDays(D0, 31);
+
+  setSkillSuspended(store, skill.id, true);
+  assert.ok(skillSuspended(skill, after));
+
+  setTargetDate(store, skill.id, addDays(D0, 400));
+  assert.equal(skill.suspended, null, 'the override is cleared');
+  assert.ok(!skillSuspended(skill, after), 'running again towards the new date');
+  assert.ok(dueItems(store, after).length > 0);
+});
+
+test('a skill with no target date is never auto-suspended', () => {
+  const { store, skill } = setup({ name: 'Guitar', genre: 'physical' });
+  logNewItem(store, skill.id, { title: 'Pentatonic', firstExposure: D0 });
+  assert.ok(!skillSuspended(skill, addDays(D0, 3650)));
+  assert.ok(dueItems(store, addDays(D0, 3650)).length > 0);
+});
+
+test('one finished subject does not suspend the others', () => {
+  const store = emptyStore();
+  const done = createSkill({ name: 'Maths', genre: 'reasoning', targetDate: addDays(D0, 10), createdAt: D0 });
+  const live = createSkill({ name: 'Spanish', genre: 'language', targetDate: addDays(D0, 200), createdAt: D0 });
+  store.skills.push(done, live);
+  logNewItem(store, done.id, { title: 'Proofs', firstExposure: D0 });
+  logNewItem(store, live.id, { title: 'el gato', firstExposure: D0 });
+
+  const date = addDays(D0, 20);
+  const due = dueItems(store, date);
+  assert.ok(due.length > 0);
+  assert.ok(due.every((i) => i.skillId === live.id), 'only the live subject is scheduled');
+  assert.equal(buildSession(store, date).windDown.length, 1);
+});
+
+test('the nav badge counts blocks, so it agrees with the page it links to', () => {
+  const { store, skill } = setup({ name: 'Spanish', genre: 'language' });
+  for (let i = 0; i < 18; i += 1) {
+    logNewItem(store, skill.id, { title: `word ${i}`, firstExposure: D0 });
+  }
+  const date = addDays(D0, 1);
+  assert.equal(dueItems(store, date).length, 18, 'eighteen cards');
+  assert.equal(dueBlockCount(store, date), 1, 'but one sitting');
+  assert.equal(dueBlockCount(store, date), buildSession(store, date).blocks.length);
+});
+
+test('the badge ignores finished subjects', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning', targetDate: addDays(D0, 10) });
+  logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+  assert.equal(dueBlockCount(store, addDays(D0, 9)), 1);
+  assert.equal(dueBlockCount(store, addDays(D0, 20)), 0);
 });

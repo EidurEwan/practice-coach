@@ -96,9 +96,10 @@ theme with the ambient wash composited at its worst point.
 
 ## 3. Build order
 
-1. **Backlog triage** — cap the visible list to the day's capacity using the
-   existing rank, rest behind a disclosure. Fix the three warning strings.
-2. **Season wind-down** — post-exam state, archive-not-delete, resume-in-September.
+1. ~~**Backlog triage**~~ — done. Focus set capped at the day's capacity using
+   the existing rank, rest behind a disclosure. Three warning strings fixed.
+2. ~~**Season wind-down**~~ — done. Derived suspension once a target date
+   passes, one-tap resume, target-date control for the next season.
 3. **Write-once fixes** — edit, archive, per-item actions, search.
 4. **Bulk paste for all genres** + continuous session flow.
 5. **Normalise the review log** — single source of truth, before sync exists.

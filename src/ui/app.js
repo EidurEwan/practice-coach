@@ -8,13 +8,15 @@ import { createSkill } from '../engine/model.js';
 import {
   buildSession,
   deferItem,
-  dueItems,
+  dueBlockCount,
   logNewItem,
   overdueItems,
   redistribute,
   restoreSchedule,
   reviewItem,
+  setSkillSuspended,
   setSubSkill,
+  setTargetDate,
   snapshotSchedule,
 } from '../engine/scheduler.js';
 import { formatLogCard, formatReviewCard } from '../engine/card.js';
@@ -328,6 +330,30 @@ const app = {
   },
   setHorizon(id) {
     this.ui.horizon = id;
+    render();
+  },
+  /** The undo on an auto-suspended subject: put it back on the schedule. */
+  resumeSkill(skillId) {
+    const skill = this.store.update((state) => setSkillSuspended(state, skillId, false));
+    this.ui.notice = { level: '', message: `"${skill.name}" is back on the schedule.` };
+    announce(this.ui.notice.message);
+    render();
+  },
+  suspendSkill(skillId) {
+    const skill = this.store.update((state) => setSkillSuspended(state, skillId, true));
+    this.ui.notice = { level: '', message: `"${skill.name}" is paused. Nothing is lost.` };
+    announce(this.ui.notice.message);
+    render();
+  },
+  setSkillTarget(skillId, date) {
+    const skill = this.store.update((state) => setTargetDate(state, skillId, date));
+    this.ui.notice = {
+      level: '',
+      message: skill.targetDate
+        ? `"${skill.name}" is scheduled towards ${skill.targetDate}.`
+        : `"${skill.name}" has no target date — it runs on the normal curve.`,
+    };
+    announce(this.ui.notice.message);
     render();
   },
   /** Re-render without changing state; for views that patch in place. */
@@ -659,7 +685,7 @@ function renderChrome() {
   }
 
   const state = app.store.state;
-  const due = dueItems(state, app.ui.date).length;
+  const due = dueBlockCount(state, app.ui.date);
   const overdue = overdueItems(state, app.ui.date).length;
 
   if (!tabNodes) buildTabs(tabs);

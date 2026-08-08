@@ -48,6 +48,48 @@ export function isPreDeadline(store, skill, date) {
   return skillMode(skill, date, store.settings.preDeadlineWindowDays).mode === 'pre-deadline';
 }
 
+/**
+ * A skill stops scheduling once its target date has passed. The exam is over,
+ * and continuing to demand daily work on a finished syllabus is the surest way
+ * to lose someone — especially when the only way out is a delete that destroys
+ * the history they would have come back for.
+ *
+ * Derived rather than stored, so nothing is rewritten behind the user's back
+ * and the undo is a single flag:
+ *   suspended === false  they chose to keep going despite the date
+ *   suspended === true   suspended by hand, whatever the date says
+ *   absent / null        derive it — suspended once the target date has passed
+ */
+export function skillSuspended(skill, date = todayISO()) {
+  if (skill.suspended === true) return true;
+  if (skill.suspended === false) return false;
+  return skillMode(skill, date).mode === 'past-deadline';
+}
+
+function suspendedSkillIds(store, date) {
+  return new Set(store.skills.filter((s) => skillSuspended(s, date)).map((s) => s.id));
+}
+
+/** The undo. Passing null hands the skill back to its target date. */
+export function setSkillSuspended(store, skillId, suspended) {
+  const skill = store.skills.find((s) => s.id === skillId);
+  if (!skill) return null;
+  skill.suspended = suspended;
+  return skill;
+}
+
+/**
+ * A new target date is a new season, so it clears any explicit override and
+ * lets scheduling follow the date again.
+ */
+export function setTargetDate(store, skillId, targetDate) {
+  const skill = store.skills.find((s) => s.id === skillId);
+  if (!skill) return null;
+  skill.targetDate = targetDate || null;
+  skill.suspended = null;
+  return skill;
+}
+
 // ---------------------------------------------------------------------------
 // Confusable-pair spacing
 // ---------------------------------------------------------------------------
@@ -349,11 +391,33 @@ export function restoreSchedule(store, snapshot) {
 // ---------------------------------------------------------------------------
 
 export function dueItems(store, date = todayISO()) {
-  return store.items.filter((i) => !i.archived && i.dueDate <= date);
+  const off = suspendedSkillIds(store, date);
+  return store.items.filter((i) => !i.archived && i.dueDate <= date && !off.has(i.skillId));
 }
 
 export function overdueItems(store, date = todayISO()) {
-  return store.items.filter((i) => !i.archived && i.dueDate < date);
+  const off = suspendedSkillIds(store, date);
+  return store.items.filter((i) => !i.archived && i.dueDate < date && !off.has(i.skillId));
+}
+
+/**
+ * How many blocks are due, without building the whole session. The nav badge
+ * has to agree with the number on the page it links to, and the page counts
+ * blocks — a deck of eighteen cards is one sitting, not eighteen.
+ */
+export function dueBlockCount(store, date = todayISO()) {
+  const batched = new Set();
+  let count = 0;
+  for (const item of dueItems(store, date)) {
+    const skill = getSkill(store, item.skillId);
+    if (!skill) continue;
+    if (usesPerItemSRS(skill.genre)) {
+      if (batched.has(skill.id)) continue;
+      batched.add(skill.id);
+    }
+    count += 1;
+  }
+  return count;
 }
 
 function byOldestTouched(a, b) {
@@ -633,6 +697,20 @@ export function buildSession(store, date = todayISO()) {
     focusCount += 1;
   }
 
+  // Subjects whose target date has passed and that the user has not overridden
+  // either way. Finishing is the one moment this product has to mark, and the
+  // one it previously ignored entirely.
+  const windDown = store.skills
+    .filter((s) => s.suspended !== true && s.suspended !== false && skillSuspended(s, date))
+    .map((skill) => ({
+      skill,
+      finishedOn: skill.targetDate,
+      daysSince: -diffDays(date, skill.targetDate),
+      topics: store.items.filter((i) => i.skillId === skill.id && !i.archived).length,
+      reviews: store.reviews.filter((r) => r.skillId === skill.id).length,
+    }))
+    .sort((a, b) => a.daysSince - b.daysSince);
+
   return {
     date,
     blocks,
@@ -646,6 +724,7 @@ export function buildSession(store, date = todayISO()) {
     focusCount,
     focusUnits,
     deferredCount: blocks.length - focusCount,
+    windDown,
   };
 }
 
@@ -805,6 +884,9 @@ export function projectLoad(store, fromDate = todayISO(), horizonDays = 14, opti
     if (skillId && item.skillId !== skillId) continue;
     const skill = getSkill(store, item.skillId);
     if (!skill) continue;
+    // A finished subject has no future: forecasting one would put an exam the
+    // student has already sat back on their calendar.
+    if (skillSuspended(skill, fromDate)) continue;
     const hits = projectUntil(item, skill.genre, skill.calibration, until, { from: fromDate });
     for (const hit of hits) {
       const bucket = index.get(bucketKey(hit.date, fromDate, granularity));

@@ -599,6 +599,46 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .slip-row .meta { color: var(--text-3); font-size: var(--t-footnote); margin-top: 2px; }
 .slip-row .body { margin-top: var(--s-md); }
 
+/* Finishing a season. Warmer than a normal card because this is the one moment
+   in the product worth marking — and the moment it previously ignored. */
+.wind-down { margin-top: var(--s-lg); }
+.wind-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--steady-wash);
+  color: var(--steady);
+  display: grid;
+  place-items: center;
+  font-size: var(--t-headline);
+  margin-bottom: var(--s-md);
+  animation: rise 0.55s var(--ease-lively);
+}
+.wind-down h3 { font-size: var(--t-title); letter-spacing: -0.017em; }
+.wind-down > p { max-width: var(--measure); margin-top: var(--s-sm); }
+.wind-list { list-style: none; padding: 0; display: grid; gap: var(--s-sm); margin: var(--s-lg) 0; }
+.wind-list li {
+  display: flex;
+  gap: var(--s-md);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: var(--s-sm);
+  border-top: 1px solid var(--hairline);
+}
+.wind-list li > div { flex: 1; min-width: 12rem; }
+.wind-name { font-weight: 600; }
+.wind-list .btn { flex: none; }
+
+/* A paused subject loses its colour identity, not its legibility. Dimming the
+   whole card with opacity was the obvious move and drops secondary ink to
+   3.6:1 — the badge and a grey marker carry it without touching any text. */
+.card.is-paused .skill-dot { background: var(--text-3); }
+.skill-controls {
+  margin-top: var(--s-md);
+  padding-top: var(--s-md);
+  border-top: 1px solid var(--hairline);
+}
+
 /* Everything due beyond today's capacity, folded away. Deliberately quiet: a
    backlog you cannot clear today is information, not an alarm. */
 .backlog { margin-top: var(--s-lg); }
