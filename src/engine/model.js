@@ -101,6 +101,41 @@ export function createItem(skill, input) {
   };
 }
 
+// A syllabus pasted out of a PDF or an exam-board spec arrives numbered, so the
+// marker is stripped. Deliberately strict: a bare leading number is left alone,
+// because "3 sets of reps" is a title, not a list item.
+const LIST_MARKER = /^\s*(?:[-*•–—]|\d+(?:\.\d+)+\.?|\d+[.)])\s+/;
+
+/**
+ * One item per line. Topic tracks take "title | sub-skill"; per-item decks take
+ * "cue | answer | encoding".
+ *
+ * This exists because entering a subject one form submission at a time was the
+ * activation wall — forty topics meant forty round trips before the app did
+ * anything useful.
+ */
+export function parseBulkInput(text, { perItem = false } = {}) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => line.replace(LIST_MARKER, '').trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split('|').map((p) => p.trim());
+      if (!perItem) {
+        const [title, subSkill] = parts;
+        return { title, subSkill: subSkill || null };
+      }
+      const [cue, answer, encoding] = parts;
+      return {
+        title: answer ? `${cue} — ${answer}` : cue,
+        cue,
+        answer: answer || null,
+        encoding: encoding || null,
+      };
+    })
+    .filter((input) => input.title);
+}
+
 /** Derived status — never stored, always recomputed from streaks. */
 export function itemStatus(item) {
   if (item.archived) return 'archived';

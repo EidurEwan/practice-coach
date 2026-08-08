@@ -49,7 +49,7 @@ export function todayView(app) {
       h('button', { class: 'btn bare tiny', style: { marginTop: 'var(--s-sm)' }, onClick: () => app.clearNotice() }, 'Dismiss'),
     ),
     warningList(app, session),
-    ui.lastResult && reviewResultCard(app),
+    ui.lastResult && reviewResultCard(app, session),
 
     noItems
       ? h('div', { class: 'empty' },
@@ -308,8 +308,11 @@ function blockCard(app, block, index) {
         : h('div', { style: { marginTop: 'var(--s-md)' } },
             // Only the top-priority card carries the accent, so "where do I
             // start" is answered by the page rather than left to the reader.
+            // The top card carries the accent — unless a result card is up, in
+            // which case its "Next" button is the one thing to do next and two
+            // accents on one screen would answer the question twice.
             h('button', {
-              class: `start-btn ${index === 0 ? 'btn primary' : 'btn'}`,
+              class: `start-btn ${index === 0 && !app.ui.lastResult ? 'btn primary' : 'btn'}`,
               onClick: () => app.startBlock(block.id),
             }, block.kind === 'batch' ? `Start ${block.items.length} card${block.items.length === 1 ? '' : 's'}` : 'Start'),
           ),
@@ -434,12 +437,15 @@ function recallPanel(app, block) {
   );
 }
 
-function reviewResultCard(app) {
+function reviewResultCard(app, session) {
   const { result, cardText } = app.ui.lastResult;
   const item = result.item;
+  // A session should feel like a queue, not a list you keep returning to. The
+  // next thing to do is named here so it takes one tap instead of a scroll —
+  // and it is the screen's only accent while this card is up, which is why the
+  // top practice card stands down (see blockCard).
+  const next = session.blocks[0] || null;
 
-  // This node only ever renders in the instant after a rating, so it carries
-  // the system's single authored motion: the stamp coming down on the slip.
   return h('div', { class: 'card pressed', style: { marginTop: 'var(--s-md)' } },
     h('div', { class: 'spread' },
       h('h3', { style: { margin: 0 } }, `Logged — ${item.title}`),
@@ -447,6 +453,17 @@ function reviewResultCard(app) {
         h('button', { class: 'btn tiny', onClick: () => app.undoLastRating() }, 'Undo'),
         h('button', { class: 'btn bare tiny', onClick: () => app.dismissResult() }, 'Dismiss'),
       ),
+    ),
+
+    h('div', { class: 'row next-up', style: { marginTop: 'var(--s-md)' } },
+      next
+        ? h('button', {
+            class: 'btn primary',
+            onClick: () => app.startBlock(next.id),
+          }, `Next: ${next.kind === 'batch' ? next.skill.name : next.item.title}`)
+        : h('span', { class: 'muted' }, 'That is everything due — the day is done.'),
+      next && h('span', { class: 'small faint' },
+        `${session.focusCount} left today`),
     ),
     h('div', { class: 'row', style: { marginTop: 'var(--s-xs)' } },
       h('span', { class: 'stamp committed' }, humanDate(item.dueDate, app.ui.date)),

@@ -3,8 +3,8 @@
 
 import { h, mount, svg } from './dom.js';
 import { addDays, todayISO, shortDate, weekday } from '../engine/dates.js';
-import { detectGenre } from '../engine/genres.js';
-import { createSkill } from '../engine/model.js';
+import { detectGenre, usesPerItemSRS } from '../engine/genres.js';
+import { createSkill, parseBulkInput } from '../engine/model.js';
 import {
   activeSkills,
   buildSession,
@@ -293,7 +293,9 @@ const app = {
       cardText: formatReviewCard(this.store.state, result, this.ui.date),
     };
     announce(`${item.title} rated ${rating}. Next review ${result.item.intervalDays} day${result.item.intervalDays === 1 ? '' : 's'} from now.`);
-    this.ui.focusAfter = '.slip-row .btn.primary, .empty .btn.primary';
+    // The result card sits above the list, so document order already puts its
+    // "Next" button first — a keyboard user lands on the next thing to do.
+    this.ui.focusAfter = '.next-up .btn.primary, .slip-row .btn.primary, .empty .btn.primary';
 
     // Batches shrink as items are rated, so restart at the top of what is left.
     if (block.kind === 'batch') {
@@ -411,15 +413,9 @@ const app = {
 
     this.store.update((state) => {
       if (bulk) {
-        for (const line of bulk.split('\n').map((l) => l.trim()).filter(Boolean)) {
-          const [cue, answer, encoding] = line.split('|').map((p) => p.trim());
-          results.push(logNewItem(state, skill.id, {
-            title: answer ? `${cue} — ${answer}` : cue,
-            cue,
-            answer: answer || null,
-            encoding: encoding || null,
-            firstExposure: date,
-          }));
+        const inputs = parseBulkInput(bulk, { perItem: usesPerItemSRS(skill.genre) });
+        for (const input of inputs) {
+          results.push(logNewItem(state, skill.id, { ...input, firstExposure: date }));
         }
       } else {
         results.push(logNewItem(state, skill.id, {

@@ -10,7 +10,7 @@ import {
   sm2Update,
 } from '../src/engine/curve.js';
 import { detectGenre, usesPerItemSRS, requiresInterleaving } from '../src/engine/genres.js';
-import { createSkill, emptyStore, itemStatus, linkConfusable } from '../src/engine/model.js';
+import { createSkill, emptyStore, itemStatus, linkConfusable, parseBulkInput } from '../src/engine/model.js';
 import {
   buildSession,
   canReview,
@@ -960,4 +960,66 @@ test('a blank required field is a slip, not an instruction to erase the name', (
   editItem(store, item.id, { subSkill: 'induction' });
   editItem(store, item.id, { subSkill: '' });
   assert.equal(item.subSkill, null);
+});
+
+// ------------------------------------------------------------------ bulk entry
+
+test('a pasted syllabus becomes topics, numbering and all', () => {
+  const parsed = parseBulkInput([
+    '1. Proof by induction',
+    '2) Vectors | scalar product',
+    '- Differentiation from first principles',
+    '• Integration by parts',
+    '1.1 Binomial expansion',
+    '3.2.1 Hypothesis testing',
+    '',
+    'Complex numbers',
+  ].join('\n'), { perItem: false });
+
+  assert.deepEqual(parsed.map((p) => p.title), [
+    'Proof by induction',
+    'Vectors',
+    'Differentiation from first principles',
+    'Integration by parts',
+    'Binomial expansion',
+    'Hypothesis testing',
+    'Complex numbers',
+  ]);
+  assert.equal(parsed[1].subSkill, 'scalar product');
+  assert.equal(parsed[0].subSkill, null);
+});
+
+test('a bare leading number is part of the title, not a list marker', () => {
+  const parsed = parseBulkInput('3 sets of reps\n5 a-side positioning', { perItem: false });
+  assert.deepEqual(parsed.map((p) => p.title), ['3 sets of reps', '5 a-side positioning']);
+});
+
+test('per-item decks still parse cue, answer and encoding', () => {
+  const parsed = parseBulkInput(
+    'el boligrafo | the pen | bowl of graph paper\nla mochila | the backpack\njust a cue',
+    { perItem: true },
+  );
+  assert.equal(parsed[0].title, 'el boligrafo — the pen');
+  assert.equal(parsed[0].cue, 'el boligrafo');
+  assert.equal(parsed[0].answer, 'the pen');
+  assert.equal(parsed[0].encoding, 'bowl of graph paper');
+  assert.equal(parsed[1].encoding, null);
+  assert.equal(parsed[2].title, 'just a cue');
+  assert.equal(parsed[2].answer, null);
+});
+
+test('bulk entry schedules every topic it parses', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning' });
+  for (const input of parseBulkInput('1. Proofs\n2. Vectors\n3. Series', { perItem: false })) {
+    logNewItem(store, skill.id, { ...input, firstExposure: D0 });
+  }
+  assert.equal(store.items.length, 3);
+  assert.ok(store.items.every((i) => i.dueDate > D0), 'each one gets a review date');
+  assert.equal(buildSession(store, addDays(D0, 30)).blocks.length, 3);
+});
+
+test('empty and whitespace-only input yields nothing', () => {
+  assert.deepEqual(parseBulkInput('', { perItem: false }), []);
+  assert.deepEqual(parseBulkInput('\n  \n\t\n', { perItem: false }), []);
+  assert.deepEqual(parseBulkInput('  |  |  ', { perItem: true }), []);
 });

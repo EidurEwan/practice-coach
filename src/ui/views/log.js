@@ -47,20 +47,25 @@ export function logView(app) {
         h('span', { class: 'hint' }, stack.primary[0]),
       ),
 
-      perItem && h('div', { class: 'row', style: { marginBottom: 'var(--s-md)' } },
+      // Every genre gets this, not just the flashcard ones. Entering a subject
+      // one submission at a time meant forty round trips before the app did
+      // anything useful, which is where people gave up.
+      h('div', { class: 'segmented', style: { marginBottom: 'var(--s-md)' } },
         h('button', {
           type: 'button',
-          class: `btn tiny ${ui.logDraft.bulk ? '' : 'primary'}`,
+          class: 'btn',
+          'aria-pressed': String(!ui.logDraft.bulk),
           onClick: () => app.setLogBulk(false),
-        }, 'One item'),
+        }, perItem ? 'One item' : 'One topic'),
         h('button', {
           type: 'button',
-          class: `btn tiny ${ui.logDraft.bulk ? 'primary' : ''}`,
+          class: 'btn',
+          'aria-pressed': String(ui.logDraft.bulk),
           onClick: () => app.setLogBulk(true),
-        }, 'Paste a list'),
+        }, perItem ? 'Paste a list' : 'Paste a syllabus'),
       ),
 
-      perItem && ui.logDraft.bulk
+      ui.logDraft.bulk
         ? bulkFields(skill)
         : singleFields(app, skill, siblings),
 
@@ -153,17 +158,24 @@ function singleFields(app, skill, siblings) {
 }
 
 function bulkFields(skill) {
+  const perItem = usesPerItemSRS(skill.genre);
+  const placeholder = perItem
+    ? (skill.genre === 'language'
+        ? 'el bolígrafo | the pen | "bowl of graph paper"\nla mochila | the backpack'
+        : 'Beryllium | Be, 4 | "Berry"\nMagnesium | Mg, 12')
+    : '1. Proof by induction\n2. Vectors | scalar product\n3. Differentiation from first principles';
+
   return h('label', { class: 'field' },
-    h('span', { class: 'lbl' }, 'One item per line'),
+    h('span', { class: 'lbl' }, perItem ? 'One item per line' : 'One topic per line'),
     h('textarea', {
       name: 'bulk',
       required: true,
       rows: 8,
-      placeholder: skill.genre === 'language'
-        ? 'el bolígrafo | the pen | "bowl of graph paper"\nla mochila | the backpack'
-        : 'Beryllium | Be, 4 | "Berry"\nMagnesium | Mg, 12',
+      placeholder,
     }),
-    h('span', { class: 'hint' }, 'cue | answer | encoding'),
+    h('span', { class: 'hint' }, perItem
+      ? 'cue | answer | encoding'
+      : 'topic | sub-skill — numbering and bullets are stripped, so a spec can go straight in'),
   );
 }
 
