@@ -2,7 +2,7 @@ import { h } from '../dom.js';
 import { humanDate, shortDate, todayISO, weekday } from '../../engine/dates.js';
 import { GENRE_LABEL } from '../../engine/genres.js';
 import { STATUS_LABEL, getSkill, itemStatus } from '../../engine/model.js';
-import { HORIZONS, projectItem, projectLoad } from '../../engine/scheduler.js';
+import { HORIZONS, projectItem, projectLoad, activeSkills } from '../../engine/scheduler.js';
 import { hueAttrs } from '../hues.js';
 
 /**
@@ -57,7 +57,7 @@ export function upcomingView(app) {
 
 /** Filter the whole tab down to one skill. */
 function skillFilter(app, activeSkill) {
-  const skills = app.store.state.skills;
+  const skills = activeSkills(app.store.state);
   if (skills.length < 2) return null;
 
   return h('div', { class: 'filters', role: 'group', 'aria-label': 'Filter by skill' },

@@ -1,3 +1,4 @@
+import { activeSkills } from '../../engine/scheduler.js';
 import { h, copyText } from '../dom.js';
 import { todayISO } from '../../engine/dates.js';
 import { GENRE_LABEL, methodStack, usesPerItemSRS } from '../../engine/genres.js';
@@ -6,7 +7,7 @@ import { ENCODING_OPTIONS } from '../../engine/methods.js';
 
 export function logView(app) {
   const { store, ui } = app;
-  const skills = store.state.skills;
+  const skills = activeSkills(store.state);
 
   if (skills.length === 0) {
     return h('div', { class: 'empty' },

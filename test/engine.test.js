@@ -20,6 +20,12 @@ import {
   projectItem,
   projectLoad,
   overdueItems,
+  activeSkills,
+  archivedSkills,
+  editItem,
+  editSkill,
+  setItemArchived,
+  setSkillArchived,
   dueBlockCount,
   dueItems,
   redistribute,
@@ -876,4 +882,82 @@ test('the badge ignores finished subjects', () => {
   logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
   assert.equal(dueBlockCount(store, addDays(D0, 9)), 1);
   assert.equal(dueBlockCount(store, addDays(D0, 20)), 0);
+});
+
+// -------------------------------------------------------------- archive & edit
+
+test('archiving a skill stops it scheduling and keeps everything', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning' });
+  const { item } = logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+  reviewItem(store, item.id, { rating: 'ok', date: item.dueDate });
+  const date = addDays(D0, 40);
+
+  assert.ok(dueItems(store, date).length > 0);
+  setSkillArchived(store, skill.id, true);
+
+  assert.equal(dueItems(store, date).length, 0);
+  assert.equal(dueBlockCount(store, date), 0);
+  assert.equal(projectLoad(store, date, 60).totalReviews, 0);
+  assert.equal(buildSession(store, date).windDown.length, 0, 'archiving is not a finished season');
+  assert.equal(store.items.length, 1, 'nothing deleted');
+  assert.equal(store.reviews.length, 1, 'history kept');
+  assert.equal(activeSkills(store).length, 0);
+  assert.equal(archivedSkills(store).length, 1);
+
+  setSkillArchived(store, skill.id, false);
+  assert.ok(dueItems(store, date).length > 0, 'restore puts it back');
+  assert.equal(activeSkills(store).length, 1);
+});
+
+test('archiving a single topic leaves its siblings scheduling', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning' });
+  const a = logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+  logNewItem(store, skill.id, { title: 'Vectors', firstExposure: D0 });
+  const date = addDays(D0, 40);
+  assert.equal(dueItems(store, date).length, 2);
+
+  setItemArchived(store, a.item.id, true);
+  const due = dueItems(store, date);
+  assert.equal(due.length, 1);
+  assert.equal(due[0].title, 'Vectors');
+  assert.equal(store.items.length, 2, 'nothing deleted');
+
+  setItemArchived(store, a.item.id, false);
+  assert.equal(dueItems(store, date).length, 2);
+});
+
+test('editing changes only what it is allowed to', () => {
+  const { store, skill } = setup({ name: 'Mahts', genre: 'reasoning', level: 'Y12' });
+  const { item } = logNewItem(store, skill.id, { title: 'Porofs', firstExposure: D0 });
+  const dueBefore = item.dueDate;
+  const easeBefore = item.ease;
+
+  editSkill(store, skill.id, { name: 'Maths', level: 'Y13' });
+  assert.equal(skill.name, 'Maths');
+  assert.equal(skill.level, 'Y13');
+
+  editItem(store, item.id, { title: 'Proofs', subSkill: 'induction' });
+  assert.equal(item.title, 'Proofs');
+  assert.equal(item.subSkill, 'induction');
+
+  // Scheduling state is the engine's, not the form's.
+  editItem(store, item.id, { ease: 9, dueDate: '2099-01-01', intervalDays: 999 });
+  assert.equal(item.ease, easeBefore);
+  assert.equal(item.dueDate, dueBefore);
+});
+
+test('a blank required field is a slip, not an instruction to erase the name', () => {
+  const { store, skill } = setup({ name: 'Maths', genre: 'reasoning' });
+  const { item } = logNewItem(store, skill.id, { title: 'Proofs', firstExposure: D0 });
+
+  editSkill(store, skill.id, { name: '   ' });
+  assert.equal(skill.name, 'Maths');
+
+  editItem(store, item.id, { title: '' });
+  assert.equal(item.title, 'Proofs');
+
+  // Optional fields may genuinely be cleared.
+  editItem(store, item.id, { subSkill: 'induction' });
+  editItem(store, item.id, { subSkill: '' });
+  assert.equal(item.subSkill, null);
 });

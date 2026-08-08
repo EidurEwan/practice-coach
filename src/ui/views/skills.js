@@ -2,7 +2,7 @@ import { h, copyText, mount } from '../dom.js';
 import { humanDate, todayISO } from '../../engine/dates.js';
 import { GENRE_LABEL, GENRES, detectGenre, methodStack } from '../../engine/genres.js';
 import { STATUS_LABEL, itemStatus, itemsForSkill } from '../../engine/model.js';
-import { skillMode, skillSuspended } from '../../engine/scheduler.js';
+import { activeSkills, archivedSkills, skillMode, skillSuspended } from '../../engine/scheduler.js';
 import { currentFormat } from '../../engine/methods.js';
 import { SCORE_OPTIONS, previewCurves, verdictFor } from '../../engine/diagnostic.js';
 import { calibrationFromDiagnostic } from '../../engine/curve.js';
@@ -10,6 +10,8 @@ import { hueAttrs } from '../hues.js';
 
 export function skillsView(app) {
   const { store, ui } = app;
+  const active = activeSkills(store.state);
+  const archived = archivedSkills(store.state);
   return h('div', null,
     h('div', { class: 'spread', style: { marginTop: 'var(--s-lg)' } },
       h('h2', { style: { margin: 0 } }, 'Skills'),
@@ -23,15 +25,51 @@ export function skillsView(app) {
 
     ui.intake.open && intakeForm(app),
 
-    store.state.skills.length === 0 && !ui.intake.open
+    active.length === 0 && !ui.intake.open
       ? h('div', { class: 'empty' },
-          h('h3', null, 'No skills yet'),
-          h('p', null, 'Name it and the genre is detected for you.'),
+          h('h3', null, archived.length ? 'Nothing active' : 'No skills yet'),
+          h('p', null, archived.length
+            ? 'Everything is archived. Restore one below, or add another.'
+            : 'Name it and the genre is detected for you.'),
         )
       : h('div', { class: 'stack', style: { marginTop: '1rem' } },
-          store.state.skills.map((s) => skillCard(app, s))),
+          active.map((s) => skillCard(app, s))),
+
+    archived.length > 0 && archivedSection(app, archived),
 
     settingsCard(app),
+  );
+}
+
+/**
+ * Archived skills live here rather than in the main list: out of the way, still
+ * reachable, and the only place a permanent delete is offered — so erasing a
+ * year of history always takes two deliberate steps.
+ */
+function archivedSection(app, archived) {
+  return h('details', { class: 'archived-set' },
+    h('summary', null, `Archived (${archived.length})`),
+    h('div', { class: 'stack', style: { marginTop: 'var(--s-md)' } },
+      archived.map((skill) => {
+        const items = app.store.state.items.filter((i) => i.skillId === skill.id);
+        return h('div', { class: 'card' },
+          h('div', { class: 'spread' },
+            h('div', null,
+              h('div', { style: { fontWeight: '600' } }, skill.name),
+              h('div', { class: 'small faint' },
+                `${GENRE_LABEL[skill.genre]} · ${items.length} topic${items.length === 1 ? '' : 's'} kept`),
+            ),
+            h('div', { class: 'row' },
+              h('button', { class: 'btn tiny', onClick: () => app.archiveSkill(skill.id, false) }, 'Restore'),
+              h('button', {
+                class: 'btn bare tiny danger',
+                onClick: () => app.destroySkill(skill),
+              }, 'Erase for good'),
+            ),
+          ),
+        );
+      }),
+    ),
   );
 }
 
@@ -289,6 +327,7 @@ function calibrationSummary(calibration) {
 
 function skillCard(app, skill) {
   const items = itemsForSkill(app.store.state, skill.id);
+  const archivedItems = app.store.state.items.filter((i) => i.skillId === skill.id && i.archived);
   const stack = methodStack(skill.genre, skill.physicalType);
   const mode = skillMode(skill, app.ui.date, app.store.state.settings.preDeadlineWindowDays);
   const expanded = app.ui.expandedSkill === skill.id;
@@ -321,9 +360,9 @@ function skillCard(app, skill) {
       h('div', { class: 'row' },
         h('button', { class: 'btn tiny', onClick: () => app.toggleSkill(skill.id) },
           expanded ? 'Hide' : `Show ${items.length}`),
-        // Bare, not filled: deleting a skill takes its whole review history
-        // with it, and it should not sit beside "Show" looking like a peer.
-        h('button', { class: 'btn bare tiny danger', onClick: () => app.deleteSkill(skill) }, 'Delete'),
+        // Archive, not delete. Nothing here destroys anything — erasing lives
+        // in the archived list, so it can only reach something already put away.
+        h('button', { class: 'btn bare tiny', onClick: () => app.archiveSkill(skill.id, true) }, 'Archive'),
       ),
     ),
 
@@ -350,6 +389,17 @@ function skillCard(app, skill) {
     expanded && (items.length === 0
       ? h('p', { class: 'small faint', style: { marginTop: 'var(--s-sm)' } }, 'Nothing logged in this track yet.')
       : itemTable(app, skill, items)),
+
+    expanded && archivedItems.length > 0 && h('details', { class: 'archived-set' },
+      h('summary', null, `Archived topics (${archivedItems.length})`),
+      h('ul', { class: 'archived-items' }, archivedItems.map((item) => h('li', null,
+        h('span', null, item.title),
+        h('button', {
+          class: 'btn tiny',
+          onClick: () => app.archiveItem(item.id, false),
+        }, 'Restore'),
+      ))),
+    ),
   );
 }
 
@@ -359,23 +409,43 @@ function skillCard(app, skill) {
  * new date is how a student comes back next September, so it cannot be buried.
  */
 function skillControls(app, skill, suspended) {
-  const input = h('input', {
+  const nameInput = h('input', {
+    type: 'text',
+    value: skill.name,
+    onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); saveDetails(); } },
+  });
+  const levelInput = h('input', {
+    type: 'text',
+    value: skill.level || '',
+    placeholder: 'e.g. Y13, B1, grade 5',
+    onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); saveDetails(); } },
+  });
+  const dateInput = h('input', {
     type: 'date',
     value: skill.targetDate || '',
-    onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } },
+    onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); saveDate(); } },
   });
-  const save = () => app.setSkillTarget(skill.id, input.value);
+  const saveDetails = () => app.saveSkillEdit(skill.id, { name: nameInput.value, level: levelInput.value });
+  const saveDate = () => app.setSkillTarget(skill.id, dateInput.value);
 
   return h('div', { class: 'skill-controls' },
+    h('div', { class: 'grid2' },
+      h('label', { class: 'field' }, h('span', { class: 'lbl' }, 'Name'), nameInput),
+      h('label', { class: 'field' }, h('span', { class: 'lbl' }, 'Level'), levelInput),
+    ),
+    h('div', { class: 'row', style: { marginBottom: 'var(--s-lg)' } },
+      h('button', { class: 'btn tiny', onClick: saveDetails }, 'Save details'),
+    ),
+
     h('label', { class: 'field', style: { margin: 0 } },
       h('span', { class: 'lbl' }, 'Target date'),
-      input,
+      dateInput,
       h('span', { class: 'hint' }, suspended
         ? 'A new date puts this subject back on the schedule.'
         : 'Practice runs timed and exam-format for the last three weeks before it.'),
     ),
     h('div', { class: 'row', style: { marginTop: 'var(--s-md)' } },
-      h('button', { class: 'btn tiny primary', onClick: save }, 'Save date'),
+      h('button', { class: 'btn tiny primary', onClick: saveDate }, 'Save date'),
       suspended
         ? h('button', { class: 'btn tiny', onClick: () => app.resumeSkill(skill.id) }, 'Resume now')
         : h('button', { class: 'btn tiny', onClick: () => app.suspendSkill(skill.id) }, 'Pause'),
@@ -399,9 +469,17 @@ function itemTable(app, skill, items) {
     // labelled list rather than scrolling sideways.
     h('tbody', null, sorted.map((item) => h('tr', null,
       h('td', { 'data-label': '' },
-        item.title,
-        item.subSkill && h('div', { class: 'small faint' }, `sub-skill: ${item.subSkill}`),
-        item.encoding && h('div', { class: 'small faint' }, `Encoding: ${item.encoding}`),
+        app.ui.editingItem === item.id
+          ? itemEditor(app, item)
+          : h('button', {
+              class: 'item-title',
+              title: 'Edit or archive this topic',
+              onClick: () => app.editingItem(item.id),
+            }, item.title),
+        item.subSkill && app.ui.editingItem !== item.id
+          && h('div', { class: 'small faint' }, `sub-skill: ${item.subSkill}`),
+        item.encoding && app.ui.editingItem !== item.id
+          && h('div', { class: 'small faint' }, `Encoding: ${item.encoding}`),
       ),
       h('td', { class: 'num', 'data-label': 'Due' }, humanDate(item.dueDate, app.ui.date)),
       h('td', { class: 'num', 'data-label': 'Interval' }, `${item.intervalDays}d`),
@@ -413,6 +491,42 @@ function itemTable(app, skill, items) {
       }, STATUS_LABEL[itemStatus(item)])),
       h('td', { class: 'small faint', 'data-label': 'Format' }, currentFormat(item, skill)),
     ))),
+  );
+}
+
+/**
+ * One row at a time, opened from the title. A per-row edit control on every
+ * line would put four buttons beside every topic; a table of a hundred topics
+ * would then be mostly buttons.
+ */
+function itemEditor(app, item) {
+  const title = h('input', {
+    type: 'text',
+    value: item.title,
+    'aria-label': 'Topic title',
+    onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } },
+  });
+  const sub = h('input', {
+    type: 'text',
+    value: item.subSkill || '',
+    placeholder: 'Sub-skill (optional)',
+    'aria-label': 'Sub-skill',
+    onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } },
+  });
+  const save = () => app.saveItemEdit(item.id, { title: title.value, subSkill: sub.value });
+
+  return h('div', { class: 'item-editor' },
+    title,
+    sub,
+    h('div', { class: 'row' },
+      h('button', { class: 'btn tiny primary', onClick: save }, 'Save'),
+      h('button', { class: 'btn bare tiny', onClick: () => app.editingItem(item.id) }, 'Cancel'),
+      h('button', {
+        class: 'btn bare tiny',
+        onClick: () => app.archiveItem(item.id, true),
+        title: 'Stop scheduling this topic, keeping its history',
+      }, 'Archive'),
+    ),
   );
 }
 

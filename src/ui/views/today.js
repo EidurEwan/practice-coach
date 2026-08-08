@@ -2,7 +2,7 @@ import { h, copyText } from '../dom.js';
 import { humanDate, shortDate, weekday } from '../../engine/dates.js';
 import { GENRE_LABEL } from '../../engine/genres.js';
 import { itemStatus, STATUS_LABEL } from '../../engine/model.js';
-import { buildSession, previewRating } from '../../engine/scheduler.js';
+import { buildSession, previewRating, activeSkills } from '../../engine/scheduler.js';
 import { formatSessionCard } from '../../engine/card.js';
 import { hueAttrs } from '../hues.js';
 
@@ -27,7 +27,7 @@ export function todayView(app) {
   const date = ui.date;
   const session = buildSession(store.state, date);
 
-  if (store.state.skills.length === 0) {
+  if (activeSkills(store.state).length === 0) {
     return h('div', { class: 'empty' },
       h('h3', null, 'No skills yet'),
       h('p', null, 'Add a skill and it builds the schedule around it.'),

@@ -639,6 +639,60 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   border-top: 1px solid var(--hairline);
 }
 
+/* A topic's title is the way into editing it — one row opens at a time, so a
+   hundred-row table does not become a hundred rows of buttons. */
+.item-title {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--t-body);
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.item-title:hover { color: var(--accent); }
+.item-editor { display: grid; gap: var(--s-sm); padding: var(--s-xs) 0 var(--s-sm); }
+
+/* Archived things: reachable, out of the way, and the only place erasing is
+   offered — so destroying history always takes two deliberate steps. */
+.archived-set { margin-top: var(--s-lg); }
+.archived-set > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-sm);
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-2);
+  font-size: var(--t-footnote);
+  font-weight: 600;
+}
+.archived-set > summary::-webkit-details-marker { display: none; }
+.archived-set > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--dur-2) var(--ease-lively);
+}
+.archived-set[open] > summary::after { transform: translateY(1px) rotate(225deg); }
+.archived-items { list-style: none; padding: 0; display: grid; gap: var(--s-sm); margin-top: var(--s-sm); }
+.archived-items li {
+  display: flex;
+  gap: var(--s-md);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-top: var(--s-sm);
+  border-top: 1px solid var(--hairline);
+}
+
 /* Everything due beyond today's capacity, folded away. Deliberately quiet: a
    backlog you cannot clear today is information, not an alarm. */
 .backlog { margin-top: var(--s-lg); }
@@ -1328,7 +1382,10 @@ details > summary { cursor: pointer; }
   .btn.tiny,
   .chip,
   .skill-total,
+  .item-title,
   .segmented .btn { min-height: 44px; }
+  /* It is a bare text button, so it needs the height to come from somewhere. */
+  .item-title { display: inline-flex; align-items: center; }
   .theme-toggle { width: 44px; height: 44px; }
   details > summary,
   .why > summary,

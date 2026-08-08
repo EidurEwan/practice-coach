@@ -100,7 +100,10 @@ theme with the ambient wash composited at its worst point.
    the existing rank, rest behind a disclosure. Three warning strings fixed.
 2. ~~**Season wind-down**~~ — done. Derived suspension once a target date
    passes, one-tap resume, target-date control for the next season.
-3. **Write-once fixes** — edit, archive, per-item actions, search.
+3. **Write-once fixes** — mostly done. Editing (skill name/level, topic
+   title/sub-skill), archive replacing delete for both skills and topics, real
+   erase moved behind archiving. **Search still outstanding** — starts to matter
+   past ~60 items.
 4. **Bulk paste for all genres** + continuous session flow.
 5. **Normalise the review log** — single source of truth, before sync exists.
 6. **Memoize `buildSession`**, patch instead of remount.

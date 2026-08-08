@@ -48,6 +48,9 @@ export function createSkill(input) {
     targetDate: input.targetDate || null,
     calibration: input.calibration ?? 1,
     diagnostic: input.diagnostic || null,
+    // Out of the way but not destroyed. Deleting is a separate, deliberate act
+    // and can only reach something already archived.
+    archived: false,
     createdAt: input.createdAt || todayISO(),
   };
 }

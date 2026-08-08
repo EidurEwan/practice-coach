@@ -6,10 +6,15 @@ import { addDays, todayISO, shortDate, weekday } from '../engine/dates.js';
 import { detectGenre } from '../engine/genres.js';
 import { createSkill } from '../engine/model.js';
 import {
+  activeSkills,
   buildSession,
   deferItem,
   dueBlockCount,
+  editItem,
+  editSkill,
   logNewItem,
+  setItemArchived,
+  setSkillArchived,
   overdueItems,
   redistribute,
   restoreSchedule,
@@ -135,6 +140,8 @@ const app = {
     intake: freshIntake(),
     onboard: freshOnboard(),
     expandedSkill: null,
+    editingItem: null,
+    showArchived: false,
     importOpen: false,
     // Every render rebuilds the DOM, so a <details> would snap shut on the next
     // action. Starting a card inside the backlog re-renders, so without this the
@@ -198,7 +205,7 @@ const app = {
   },
   skipOnboarding() {
     this.store.update((state) => { state.settings.onboarded = true; });
-    this.ui.route = this.store.state.skills.length ? 'today' : 'skills';
+    this.ui.route = activeSkills(this.store.state).length ? 'today' : 'skills';
     render();
   },
   finishOnboarding() {
@@ -507,10 +514,30 @@ const app = {
     this.ui.expandedSkill = this.ui.expandedSkill === id ? null : id;
     render();
   },
-  deleteSkill(skill) {
+  archiveSkill(skillId, archived) {
+    const skill = this.store.update((state) => setSkillArchived(state, skillId, archived));
+    if (archived && this.ui.logDraft.skillId === skillId) this.ui.logDraft.skillId = null;
+    this.ui.notice = {
+      level: '',
+      message: archived
+        ? `"${skill.name}" is archived. Nothing is deleted — restore it any time.`
+        : `"${skill.name}" is back.`,
+    };
+    announce(this.ui.notice.message);
+    render();
+  },
+  /**
+   * The only permanent delete, and it can only reach a skill that is already
+   * archived — so erasing a year of history is always two deliberate steps.
+   */
+  destroySkill(skill) {
     const items = this.store.state.items.filter((i) => i.skillId === skill.id);
+    const reviews = this.store.state.reviews.filter((r) => r.skillId === skill.id);
     const ok = window.confirm(
-      `Delete "${skill.name}" and its ${items.length} tracked item(s), including all review history? This cannot be undone.`,
+      `Permanently erase "${skill.name}"?\n\n`
+      + `${items.length} topic${items.length === 1 ? '' : 's'} and `
+      + `${reviews.length} review${reviews.length === 1 ? '' : 's'} will be gone for good. `
+      + 'This cannot be undone.',
     );
     if (!ok) return;
     this.store.update((state) => {
@@ -520,6 +547,39 @@ const app = {
       state.reviews = state.reviews.filter((r) => r.skillId !== skill.id);
       state.confusables = state.confusables.filter((c) => !ids.has(c.a) && !ids.has(c.b));
     });
+    this.ui.notice = { level: '', message: `"${skill.name}" was erased.` };
+    announce(this.ui.notice.message);
+    render();
+  },
+  saveSkillEdit(skillId, patch) {
+    const skill = this.store.update((state) => editSkill(state, skillId, patch));
+    this.ui.notice = { level: '', message: `Saved — "${skill.name}".` };
+    announce(this.ui.notice.message);
+    render();
+  },
+
+  // -------------------------------------------------------------- items
+  editingItem(itemId) {
+    this.ui.editingItem = this.ui.editingItem === itemId ? null : itemId;
+    render();
+  },
+  saveItemEdit(itemId, patch) {
+    const item = this.store.update((state) => editItem(state, itemId, patch));
+    this.ui.editingItem = null;
+    this.ui.notice = { level: '', message: `Saved — "${item.title}".` };
+    announce(this.ui.notice.message);
+    render();
+  },
+  archiveItem(itemId, archived) {
+    const item = this.store.update((state) => setItemArchived(state, itemId, archived));
+    this.ui.editingItem = null;
+    this.ui.notice = {
+      level: '',
+      message: archived
+        ? `"${item.title}" is archived — it stops being scheduled, and its history is kept.`
+        : `"${item.title}" is back on the schedule.`,
+    };
+    announce(this.ui.notice.message);
     render();
   },
 
@@ -690,7 +750,7 @@ function renderChrome() {
 
   if (!tabNodes) buildTabs(tabs);
 
-  const badges = { today: due, skills: state.skills.length };
+  const badges = { today: due, skills: activeSkills(state).length };
   for (const { id, button, count } of tabNodes) {
     button.setAttribute('aria-current', String(id === app.ui.route));
     const n = badges[id] || 0;

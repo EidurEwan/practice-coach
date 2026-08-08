@@ -61,6 +61,7 @@ export function isPreDeadline(store, skill, date) {
  *   absent / null        derive it — suspended once the target date has passed
  */
 export function skillSuspended(skill, date = todayISO()) {
+  if (skill.archived) return true;
   if (skill.suspended === true) return true;
   if (skill.suspended === false) return false;
   return skillMode(skill, date).mode === 'past-deadline';
@@ -68,6 +69,58 @@ export function skillSuspended(skill, date = todayISO()) {
 
 function suspendedSkillIds(store, date) {
   return new Set(store.skills.filter((s) => skillSuspended(s, date)).map((s) => s.id));
+}
+
+/** The skills the app should be showing anywhere it offers a choice. */
+export function activeSkills(store) {
+  return store.skills.filter((s) => !s.archived);
+}
+
+export function archivedSkills(store) {
+  return store.skills.filter((s) => s.archived);
+}
+
+export function setSkillArchived(store, skillId, archived) {
+  const skill = store.skills.find((s) => s.id === skillId);
+  if (!skill) return null;
+  skill.archived = Boolean(archived);
+  return skill;
+}
+
+export function setItemArchived(store, itemId, archived) {
+  const item = store.items.find((i) => i.id === itemId);
+  if (!item) return null;
+  item.archived = Boolean(archived);
+  return item;
+}
+
+// Only these may be edited. A free-form patch would let the UI reach scheduling
+// state — ease, interval, due date — which is the engine's to own, not the
+// form's.
+const SKILL_EDITABLE = ['name', 'level'];
+const ITEM_EDITABLE = ['title', 'subSkill', 'cue', 'answer', 'encoding', 'notes'];
+
+function applyEdit(target, patch, allowed, required = []) {
+  for (const key of allowed) {
+    if (patch[key] === undefined) continue;
+    const value = String(patch[key]).trim();
+    // A blank required field is a slip, not an instruction to erase the name.
+    if (required.includes(key) && !value) continue;
+    target[key] = required.includes(key) ? value : (value || null);
+  }
+  return target;
+}
+
+export function editSkill(store, skillId, patch) {
+  const skill = store.skills.find((s) => s.id === skillId);
+  if (!skill) return null;
+  return applyEdit(skill, patch, SKILL_EDITABLE, ['name']);
+}
+
+export function editItem(store, itemId, patch) {
+  const item = store.items.find((i) => i.id === itemId);
+  if (!item) return null;
+  return applyEdit(item, patch, ITEM_EDITABLE, ['title']);
 }
 
 /** The undo. Passing null hands the skill back to its target date. */
@@ -701,7 +754,7 @@ export function buildSession(store, date = todayISO()) {
   // either way. Finishing is the one moment this product has to mark, and the
   // one it previously ignored entirely.
   const windDown = store.skills
-    .filter((s) => s.suspended !== true && s.suspended !== false && skillSuspended(s, date))
+    .filter((s) => !s.archived && s.suspended !== true && s.suspended !== false && skillSuspended(s, date))
     .map((skill) => ({
       skill,
       finishedOn: skill.targetDate,
