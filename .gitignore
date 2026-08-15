@@ -11,3 +11,6 @@ npm-debug.log*
 
 # Design-tool cache
 .impeccable/
+
+# The Expo web export is committed at the root because GitHub Pages serves
+# `main` from `/`. Its source is in mobile/.

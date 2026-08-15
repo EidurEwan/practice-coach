@@ -1,0 +1,38 @@
+<!--
+  The sign-up confirmation email. It carries a six-digit code rather than only
+  a link, because the app asks for the code on the phone that is signing up —
+  a link would send them to a browser and back.
+-->
+<div style="font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; color: #1c1c1e; line-height: 1.55">
+  <h2 style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px">
+    Confirm your email
+  </h2>
+
+  <p style="margin: 0 0 20px; color: #55555f">
+    Enter this code in Interval to finish creating your account.
+  </p>
+
+  <p
+    style="
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      margin: 0 0 20px;
+      padding: 16px 20px;
+      background: #e6ebff;
+      color: #3b62d9;
+      border-radius: 14px;
+      display: inline-block;
+    "
+  >
+    {{ .Token }}
+  </p>
+
+  <p style="margin: 0 0 20px; color: #6c6b74; font-size: 13px">
+    It expires in ten minutes. If you did not ask for this, nothing has been created — ignore this email.
+  </p>
+
+  <p style="margin: 0; color: #6c6b74; font-size: 13px">
+    Or confirm in a browser instead: <a href="{{ .ConfirmationURL }}" style="color: #3b62d9">confirm my email</a>
+  </p>
+</div>

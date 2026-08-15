@@ -1,63 +1,37 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#edecea" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#131316" media="(prefers-color-scheme: dark)">
-<title>Practice Coach</title>
-<link rel="stylesheet" href="./styles.css">
-<link rel="manifest" href="./manifest.webmanifest">
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
-<link rel="icon" type="image/png" href="./icons/icon-192.png">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%233b62d9'/><rect x='7' y='8' width='18' height='16' rx='3' fill='%23fbfbf9'/><path d='M11 13h10M11 16.5h10M11 20h6' stroke='%233b62d9' stroke-width='2' stroke-linecap='round'/></svg>">
-<script>
-  // Applied before first paint so a chosen theme never flashes the other one.
-  try {
-    var saved = JSON.parse(localStorage.getItem('practice-coach:v1') || '{}');
-    var theme = saved && saved.settings && saved.settings.theme;
-    if (theme === 'light' || theme === 'dark') {
-      document.documentElement.setAttribute('data-theme', theme);
-    }
-  } catch (e) { /* first run, or storage unavailable */ }
-</script>
-</head>
-<body>
-  <div class="save-alert" id="save-alert" role="alert" hidden>
-    <div class="shell">
-      <strong>Your last change was not saved.</strong>
-      Browser storage is full or blocked, so reviews you record now will be lost when you
-      close this tab. Export your data from Skills → Settings before carrying on.
-    </div>
-  </div>
-  <p class="sr-only" id="live" role="status" aria-live="polite"></p>
-  <div class="layout">
-    <div class="sidebar" id="sidebar">
-      <header class="masthead" id="masthead">
-        <div class="shell inner">
-          <h1>
-            <!-- The product in one mark: four reviews walking out along the
-                 expanding spacing curve, the last one still to come. -->
-            <span class="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M3.2 12h17.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
-                <circle cx="3.2" cy="12" r="1.9" fill="currentColor"/>
-                <circle cx="7" cy="12" r="1.9" fill="currentColor"/>
-                <circle cx="12.4" cy="12" r="1.9" fill="currentColor"/>
-                <circle cx="20.4" cy="12" r="1.9" fill="currentColor" opacity="0.5"/>
-              </svg>
-            </span>
-            Practice Coach
-          </h1>
-          <span class="stamped-date" id="stamped-date"></span>
-          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch colour theme"></button>
-        </div>
-      </header>
-      <nav class="tabs" id="tabs" aria-label="Sections"></nav>
-    </div>
-    <main class="shell" id="view"></main>
-  </div>
-  <script type="module" src="./src/ui/app.js"></script>
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Interval</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  <link rel="icon" href="/practice-coach/favicon.ico"/></head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  <script src="/practice-coach/_expo/static/js/web/index-bc8f1498cbe506eb5be70fe157caf944.js" defer></script>
 </body>
 </html>

@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Interval",
+    "slug": "interval",
+    "scheme": "interval",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/IntervalLogo.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.interval.app",
+      "usesAppleSignIn": true
+    },
+    "android": {
+      "package": "com.interval.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#EDECEA",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Unbounded-Bold.ttf"
+          ]
+        }
+      ],
+      "expo-web-browser",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/IntervalLogo.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#edecea",
+          "dark": { "backgroundColor": "#141417" }
+        }
+      ]
+    ],
+    "extra": {
+      "supabaseUrl": "",
+      "supabaseAnonKey": ""
+    },
+    "experiments": {
+      "//": "GitHub Pages serves this repo under /practice-coach, and the web export writes absolute asset paths.",
+      "baseUrl": "/practice-coach"
+    }
+  }
+}
