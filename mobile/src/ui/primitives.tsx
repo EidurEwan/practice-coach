@@ -14,7 +14,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../theme/theme';
-import { HIT_SLOP, motion, radius, TOUCH, type, UI_FONT } from '../theme/tokens';
+import { HIT_SLOP, motion, NATIVE_DRIVER, radius, TOUCH, type, UI_FONT } from '../theme/tokens';
 
 /* -------------------------------------------------------------------- text */
 
@@ -70,7 +70,7 @@ export function Press({ scale = 0.97, style, children, ...rest }: PressProps) {
       toValue: value,
       duration: t.reduceMotion ? 0 : motion.press,
       easing: Easing.bezier(0.32, 0.72, 0, 1),
-      useNativeDriver: true,
+      useNativeDriver: NATIVE_DRIVER,
     }).start();
 
   return (
@@ -119,7 +119,7 @@ function Enter({
       duration,
       delay,
       easing: Easing.bezier(0.22, 1, 0.36, 1),
-      useNativeDriver: true,
+      useNativeDriver: NATIVE_DRIVER,
     }).start();
   }, [delay, duration, t.reduceMotion, v]);
 
@@ -255,8 +255,20 @@ export function Segmented<T extends string>({
   height?: number;
 }) {
   const t = useTheme();
+
+  /*
+    The selected segment has to sit *above* its track, and in a dark palette
+    "above" means lighter. Using surf-on-sunk for both themes inverts that:
+    light lifts 228 → 251, dark drops 42 → 30, so the chosen option reads as a
+    hole punched in the track and the ones you did not choose look active.
+    Going a step down for the track instead keeps the same 22-point lift in
+    both, with each token still doing its own job — a recess and a surface.
+  */
+  const track = t.dark ? t.c.bg : t.c.sunk;
+  const raised = t.dark ? t.c.sunk : t.c.surf;
+
   return (
-    <View style={{ flexDirection: 'row', gap: 3, backgroundColor: t.c.sunk, borderRadius: radius.input, padding: 3 }}>
+    <View style={{ flexDirection: 'row', gap: 3, backgroundColor: track, borderRadius: radius.input, padding: 3 }}>
       {options.map((o) => {
         const on = o.key === value;
         return (
@@ -271,7 +283,7 @@ export function Segmented<T extends string>({
               borderRadius: 10,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: on ? t.c.surf : 'transparent',
+              backgroundColor: on ? raised : 'transparent',
             }}
           >
             <Txt v="secondary" c={on ? t.c.tx : t.c.fnt} style={{ fontWeight: '600' }} numberOfLines={1}>
@@ -450,7 +462,7 @@ export function Toggle({ value, onChange }: { value: boolean; onChange: (v: bool
       toValue: value ? 1 : 0,
       duration: t.reduceMotion ? 0 : motion.press,
       easing: Easing.bezier(0.32, 0.72, 0, 1),
-      useNativeDriver: true,
+      useNativeDriver: NATIVE_DRIVER,
     }).start();
   }, [t.reduceMotion, v, value]);
 
@@ -519,7 +531,7 @@ export function CapacityBar({ ratio }: { ratio: number }) {
       toValue: target,
       duration: t.reduceMotion ? 0 : motion.rise,
       easing: Easing.bezier(0.22, 1, 0.36, 1),
-      useNativeDriver: true,
+      useNativeDriver: NATIVE_DRIVER,
     }).start();
   }, [t.reduceMotion, target, v]);
 

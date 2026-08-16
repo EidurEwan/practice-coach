@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useTheme } from '../theme/theme';
-import { motion } from '../theme/tokens';
+import { motion, NATIVE_DRIVER } from '../theme/tokens';
 
 /**
  * The prototype's icons, as paths. All of them are 1.6–1.9 stroke with rounded
@@ -29,7 +29,7 @@ export function Chevron({ open, size = 13, color }: IconProps & { open: boolean 
       toValue: open ? 1 : 0,
       duration: t.reduceMotion ? 0 : motion.chevron,
       easing: Easing.bezier(0.32, 0.72, 0, 1),
-      useNativeDriver: true,
+      useNativeDriver: NATIVE_DRIVER,
     }).start();
   }, [open, t.reduceMotion, v]);
 

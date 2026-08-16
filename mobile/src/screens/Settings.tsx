@@ -8,6 +8,7 @@ import { useStore } from '../store/store';
 import { useAuth } from '../sync/auth';
 import { syncSummary } from '../sync/sync';
 import { useTheme } from '../theme/theme';
+import { ON_DEVICE } from '../ui/copy';
 import { radius } from '../theme/tokens';
 import {
   Card,
@@ -114,10 +115,10 @@ export function SettingsScreen() {
         <Txt v="secondary" c={auth.sync.error ? t.c.red : t.c.fnt} style={{ marginTop: 8, lineHeight: 19 }}>
           {auth.sync.error
             ? // A failure the user can act on beats a status word they cannot.
-              `${auth.sync.error} — everything is still safe on this phone, and syncing resumes on its own.`
+              `${auth.sync.error} — everything is still safe ${ON_DEVICE}, and syncing resumes on its own.`
             : auth.signedIn
               ? syncSummary(store.doc)
-              : 'Ratings are held on this phone. Export from below if you want a copy.'}
+              : `Ratings are held ${ON_DEVICE}. Export from below if you want a copy.`}
         </Txt>
         {auth.sync.error ? (
           <PrimaryButton
@@ -250,7 +251,7 @@ export function SettingsScreen() {
         >
           <Txt style={{ flex: 1 }}>Sign out</Txt>
           <Txt v="secondary" c={t.c.fnt}>
-            Schedule stays on this phone
+            {`Schedule stays ${ON_DEVICE}`}
           </Txt>
         </Press>
 
@@ -260,7 +261,7 @@ export function SettingsScreen() {
           onPress={() =>
             confirm(
               'Delete account',
-              'Removes the copy on the server within 30 days. What is on this phone stays until you erase it.',
+              `Removes the copy on the server within 30 days. What is ${ON_DEVICE} stays until you erase it.`,
               'Delete',
               () => {
                 auth.deleteAccount().catch((e) => Alert.alert('Could not delete the account', String(e.message ?? e)));
@@ -280,7 +281,7 @@ export function SettingsScreen() {
           onPress={() =>
             confirm(
               'Erase everything',
-              'Every skill, topic and rating on this phone. This one cannot be undone.',
+              `Every skill, topic and rating ${ON_DEVICE}. This one cannot be undone.`,
               'Erase',
               () => void store.eraseEverything(),
             )
@@ -301,7 +302,7 @@ export function SettingsScreen() {
       <Sheet open={importOpen} onClose={() => setImportOpen(false)}>
         <Txt v="sheetTitle">Import</Txt>
         <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 4, lineHeight: 19 }}>
-          Paste an export. It replaces what is on this phone — export first if you want to keep it.
+          {`Paste an export. It replaces what is ${ON_DEVICE} — export first if you want to keep it.`}
         </Txt>
         <View style={{ marginTop: 16 }}>
           <Field value={importText} onChangeText={setImportText} placeholder='{"skills":[…]}' autoCapitalize="none" />

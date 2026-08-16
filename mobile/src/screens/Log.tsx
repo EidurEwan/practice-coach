@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { addDays, backIn, daysBetween, formatShort, inWords, relativePast } from '../engine/dates';
-import { methodFor } from '../engine/genres';
+import { GENRE_EXAMPLE, methodFor } from '../engine/genres';
 import { badgeFor } from '../engine/plan';
 import { applyLog, firstInterval } from '../engine/schedule';
 import { useNav } from '../nav/router';
@@ -140,7 +140,7 @@ export function LogScreen() {
                   setTitle(v);
                   setSaved(null);
                 }}
-                placeholder="Integration by parts"
+                placeholder={GENRE_EXAMPLE[skill?.genre ?? 'reasoning'].topic}
               />
             </View>
             {existing ? (
@@ -153,7 +153,7 @@ export function LogScreen() {
           <View style={{ marginTop: 16 }}>
             <Label>Sub-skill</Label>
             <View style={{ marginTop: 8 }}>
-              <Field value={sub} onChangeText={setSub} placeholder="Choosing u and dv" />
+              <Field value={sub} onChangeText={setSub} placeholder={GENRE_EXAMPLE[skill?.genre ?? 'reasoning'].sub} />
             </View>
           </View>
 

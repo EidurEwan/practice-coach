@@ -1,4 +1,4 @@
-import { Band } from '../engine/bands';
+import { Band, BandTone } from '../engine/bands';
 import { Flag } from '../engine/plan';
 import { Rating } from '../engine/types';
 import { Palette } from './tokens';
@@ -14,6 +14,28 @@ export function bandColor(band: Band, c: Palette): string {
       return c.grn;
     case 'acc':
       return c.acc;
+  }
+}
+
+/**
+ * A band as a foreground and its tint, for chips and badges. `fnt` is not a
+ * band — it is the muted state a paused skill uses — but it belongs on the
+ * same switch so no caller has to invent a fallback. Callers that map only
+ * some tones and default the rest end up painting Fragile and Learning in the
+ * accent, which is the opposite of what the band table says.
+ */
+export function bandColors(tone: BandTone | 'fnt', c: Palette): { fg: string; bg: string } {
+  switch (tone) {
+    case 'red':
+      return { fg: c.red, bg: c.redT };
+    case 'amb':
+      return { fg: c.amb, bg: c.ambT };
+    case 'grn':
+      return { fg: c.grn, bg: c.grnT };
+    case 'acc':
+      return { fg: c.acc, bg: c.accT };
+    case 'fnt':
+      return { fg: c.fnt, bg: c.sunk };
   }
 }
 

@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { bandFor, gapLabel, pipsFor } from '../engine/bands';
+import { bandFor, BandTone, gapLabel, pipsFor } from '../engine/bands';
 import { formatWithYear } from '../engine/dates';
 import { curveLabel, curveName, detectGenre, Genre, GENRE_LABEL, GENRES, methodFor, PhysicalKind } from '../engine/genres';
 import { badgeFor } from '../engine/plan';
 import { Skill, Topic } from '../engine/types';
 import { useStore } from '../store/store';
-import { bandColor } from '../theme/colors';
+import { bandColor, bandColors } from '../theme/colors';
 import { useTheme } from '../theme/theme';
 import { TOUCH, radius } from '../theme/tokens';
 import { Archive, Chevron, Pencil, Plus } from '../ui/icons';
@@ -162,12 +162,19 @@ export function SkillsScreen() {
 
 /* ------------------------------------------------------------ skill card */
 
-function stateOf(topics: Topic[]): { label: string; tone: 'acc' | 'grn' | 'fnt' } {
+/**
+ * A skill reads as weak as its weakest live topic, and takes that topic's band
+ * — label and tone together. Naming the band here rather than inventing a
+ * parallel vocabulary is what keeps a card that says "Fragile" the same colour
+ * as the topic on Today that made it fragile.
+ */
+function stateOf(topics: Topic[]): { label: string; tone: BandTone | 'fnt' } {
   if (!topics.length) return { label: 'New', tone: 'acc' };
   if (topics.every((x) => x.state === 'paused')) return { label: 'Paused', tone: 'fnt' };
   const live = topics.filter((x) => x.state !== 'paused');
-  if (live.some((x) => x.interval_days < 10)) return { label: 'Learning', tone: 'acc' };
-  return { label: 'Stable', tone: 'grn' };
+  const weakest = live.reduce((a, b) => (a.interval_days <= b.interval_days ? a : b));
+  const band = bandFor(weakest.interval_days);
+  return band.level >= 4 ? { label: 'Stable', tone: band.tone } : { label: band.label, tone: band.tone };
 }
 
 function SkillCard({
@@ -203,7 +210,7 @@ function SkillCard({
   const store = useStore();
   const topics = store.doc.topics.filter((x) => !x.archived_at && x.skill_id === skill.id);
   const state = stateOf(topics);
-  const tone = state.tone === 'grn' ? { fg: t.c.grn, bg: t.c.grnT } : state.tone === 'fnt' ? { fg: t.c.fnt, bg: t.c.sunk } : { fg: t.c.acc, bg: t.c.accT };
+  const tone = bandColors(state.tone, t.c);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [topicDraft, setTopicDraft] = useState('');
 

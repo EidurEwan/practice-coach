@@ -176,6 +176,15 @@ export const type = {
   num: tnum,
 };
 
+/**
+ * Whether an animation can be handed to the native driver.
+ *
+ * There is no native animated module on the web, so asking for one there warns
+ * once per animation and then falls back to JS anyway. The fallback is what we
+ * want; the warning is noise that buries real ones in the console.
+ */
+export const NATIVE_DRIVER = Platform.OS !== 'web';
+
 /** Motion, in ms. `Respect prefers-reduced-motion` is handled by the caller. */
 export const motion = {
   rise: 440,

@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { Route, TABS, useNav } from '../nav/router';
 import { useTheme } from '../theme/theme';
-import { motion, radius, space, TOUCH, type } from '../theme/tokens';
+import { motion, NATIVE_DRIVER, radius, space, TOUCH, type } from '../theme/tokens';
 import { Back, Plus, SettingsGlyph, SkillsGlyph, TodayGlyph, UpcomingGlyph } from './icons';
 import { Press, Txt } from './primitives';
 
@@ -166,7 +166,7 @@ export function TabBar({ dueCount }: { dueCount: number }) {
       toValue: index,
       duration: t.reduceMotion ? 0 : motion.pill,
       easing: Easing.bezier(0.32, 0.72, 0, 1),
-      useNativeDriver: true,
+      useNativeDriver: NATIVE_DRIVER,
     }).start();
   }, [index, slide, t.reduceMotion]);
 
@@ -291,7 +291,7 @@ export function UndoToast({ text, onUndo }: { text: string; onUndo: () => void }
       toValue: 1,
       duration: t.reduceMotion ? 0 : motion.disclose,
       easing: Easing.bezier(0.22, 1, 0.36, 1),
-      useNativeDriver: true,
+      useNativeDriver: NATIVE_DRIVER,
     }).start();
   }, [t.reduceMotion, v]);
 
@@ -349,14 +349,14 @@ export function Sheet({
         toValue: 1,
         duration: t.reduceMotion ? 0 : motion.sheetIn,
         easing: Easing.bezier(0.22, 1, 0.36, 1),
-        useNativeDriver: true,
+        useNativeDriver: NATIVE_DRIVER,
       }).start();
     } else if (mounted) {
       Animated.timing(v, {
         toValue: 0,
         duration: t.reduceMotion ? 0 : motion.sheetOut,
         easing: Easing.bezier(0.4, 0, 1, 1),
-        useNativeDriver: true,
+        useNativeDriver: NATIVE_DRIVER,
       }).start(({ finished }) => finished && setMounted(false));
     }
   }, [mounted, open, t.reduceMotion, v]);

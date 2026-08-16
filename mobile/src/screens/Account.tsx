@@ -9,13 +9,14 @@ import { useTheme } from '../theme/theme';
 import { radius } from '../theme/tokens';
 import { AppleMark, Back, Check, GoogleMark } from '../ui/icons';
 import { Card, Field, Label, Press, PrimaryButton, Row, TextButton, Txt } from '../ui/primitives';
+import { DEVICE, ON_DEVICE } from '../ui/copy';
 import { Screen } from '../ui/shell';
 
 const COPY: Record<AuthStep, [string, string, string]> = {
   welcome: [
     'Account',
     'Sign in to Interval',
-    'Your schedule lives on this phone. An account keeps a copy, so a lost phone is not a lost year.',
+    `Your schedule lives ${ON_DEVICE}. An account keeps a copy, so a lost ${DEVICE} is not a lost year.`,
   ],
   create: ['Account', 'Create your account', 'Three things it buys you. Everything else works the same offline.'],
   verify: ['Account', 'Check your inbox', 'Six digits, and they expire in ten minutes.'],
@@ -23,7 +24,7 @@ const COPY: Record<AuthStep, [string, string, string]> = {
   done: [
     'Account',
     "You're signed in",
-    'Everything logged from here syncs. The schedule is still computed on the phone.',
+    `Everything logged from here syncs. The schedule is still computed ${ON_DEVICE}.`,
   ],
 };
 
@@ -126,7 +127,11 @@ export function AccountScreen({
     <Screen scroll={false} bottomPadding={30} style={{ paddingTop: insets.top + 12 }}>
       <Row gap={12}>
         <Press
-          onPress={() => (step === 'welcome' || step === 'done' ? leave() : go('welcome'))}
+          // The stack already knows where you came from — each step is its own
+          // entry — so pop it rather than guessing at `welcome`. Entering at
+          // `create` straight from onboarding and being dropped on `welcome`
+          // lands you on a step you never saw. Signing in is a one-way door.
+          onPress={() => (step === 'done' || !nav.canGoBack ? leave() : nav.back())}
           accessibilityLabel="Back"
           style={{ width: 36, height: 36, marginLeft: -8, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }}
         >
@@ -194,7 +199,9 @@ export function AccountScreen({
                   secure
                   bordered
                 />
-                {step === 'create' ? <Strength password={password} /> : null}
+                {/* An empty field has not failed anything yet — "Too short"
+                    before a keystroke is an accusation, not feedback. */}
+                {step === 'create' && password.length ? <Strength password={password} /> : null}
               </View>
             ) : null}
           </View>
@@ -234,16 +241,22 @@ export function AccountScreen({
           </Card>
         ) : null}
 
+      </View>
+
+      <View style={{ gap: 8 }}>
+        {/*
+          The error sits with the button rather than at the end of the content
+          above, which flexes: a long message there is pushed under this block
+          and clipped mid-sentence, so the one thing you need to read is the
+          one thing you cannot.
+        */}
         {error ? (
-          <View style={{ marginTop: 16, borderRadius: radius.input, padding: 13, backgroundColor: t.c.redT }}>
+          <View style={{ marginBottom: 8, borderRadius: radius.input, padding: 13, backgroundColor: t.c.redT }}>
             <Txt v="secondary" c={t.c.red} style={{ lineHeight: 19 }}>
               {error}
             </Txt>
           </View>
         ) : null}
-      </View>
-
-      <View style={{ gap: 8 }}>
         <PrimaryButton label={busy ? 'One moment…' : cta} disabled={disabled} onPress={submit} />
         <TextButton label={altLabel} onPress={alt} />
         {step === 'welcome' ? <TextButton label="Forgot password" color={t.c.acc} onPress={() => go('forgot')} /> : null}

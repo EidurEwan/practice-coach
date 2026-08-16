@@ -28,5 +28,11 @@ export const supabase: SupabaseClient | null = isConfigured
     })
   : null;
 
+/**
+ * Read by someone trying to make an account, not by whoever deploys the build,
+ * so it names what they can do rather than the environment variables they have
+ * never heard of. The build that has no project configured is a build where
+ * accounts were not switched on.
+ */
 export const NOT_CONFIGURED =
-  'No Supabase project is configured yet. Everything still works offline — set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to turn on backup and sync.';
+  'Accounts are turned off in this build, so there is nothing to sign in to. Everything still works — your schedule is kept on this device, and Export in Settings takes a copy.';

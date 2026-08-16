@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { backIn, inWords } from '../engine/dates';
-import { curveName, detectGenre, GENRE_LABEL } from '../engine/genres';
+import { curveName, detectGenre, Genre, GENRE_EXAMPLE, GENRE_LABEL, GENRES, PhysicalKind } from '../engine/genres';
 import { curveBars } from '../engine/recall';
 import { firstInterval } from '../engine/schedule';
 import { useNav } from '../nav/router';
@@ -26,6 +26,7 @@ import {
   TextButton,
   Txt,
 } from '../ui/primitives';
+import { DEVICE } from '../ui/copy';
 import { Logo, Screen } from '../ui/shell';
 
 const COPY: [string, string][] = [
@@ -41,7 +42,7 @@ const COPY: [string, string][] = [
     'This is what Interval does about it',
     'You study away from the phone. Interval only needs to know what you covered and how the reviews went — it does the timing.',
   ],
-  ['Register to Interval', ''],
+  ['Register with Interval', ''],
   [
     'Different material forgets differently',
     'A maths proof and a vocabulary card do not behave the same way, so Interval picks the curve and the practice method from what kind of skill it is.',
@@ -64,9 +65,18 @@ export function OnboardingScreen({ step }: { step: number }) {
     nav.go({ name: 'today' });
   };
 
-  if (step === 4) return <RegisterGate onNext={() => go(5)} />;
+  if (step === 4) return <RegisterGate onNext={() => go(5)} onBack={() => go(3)} />;
 
-  return <Steps step={step} onNext={() => (step === 8 ? finish() : go(step + 1))} onBack={() => go(step - 1)} onSkip={finish} />;
+  return (
+    <Steps
+      step={step}
+      onNext={() => (step === 8 ? finish() : go(step + 1))}
+      onBack={() => go(step - 1)}
+      // The last step's secondary action says "Back to the top", so it goes
+      // there. Every earlier step skips setup, which finishes.
+      onSkip={() => (step === 8 ? go(1) : finish())}
+    />
+  );
 }
 
 /* -------------------------------------------------------------- progress */
@@ -307,8 +317,18 @@ function AddSkillsStep() {
   const t = useTheme();
   const store = useStore();
   const [name, setName] = useState('');
+  const [override, setOverride] = useState<Genre | null>(null);
+  const [kind, setKind] = useState<PhysicalKind>('closed');
   const detection = useMemo(() => detectGenre(name), [name]);
   const added = store.doc.skills.filter((s) => !s.archived_at);
+
+  // Detection reads an empty string as "reasoning", so until there is a name
+  // there is nothing to have detected — announcing a genre for a blank field
+  // is a guess about nothing.
+  const typed = name.trim().length > 0;
+  const genre = override ?? detection.genre;
+  const confidence = override ? 'Set by you' : detection.confidence;
+  const guessed = confidence === 'Guessed';
 
   return (
     <>
@@ -320,20 +340,57 @@ function AddSkillsStep() {
 
         <View style={{ marginTop: 16, borderRadius: radius.button, padding: 16, backgroundColor: t.c.sunk }}>
           <Row gap={8}>
-            <Label>Detected genre</Label>
+            <Label>{override ? 'Genre' : 'Detected genre'}</Label>
             <View style={{ flex: 1 }} />
-            <Badge
-              text={detection.confidence}
-              fg={detection.confidence === 'Guessed' ? t.c.amb : t.c.acc}
-              bg={detection.confidence === 'Guessed' ? t.c.ambT : t.c.accT}
-            />
+            {typed || override ? (
+              <Badge text={confidence} fg={guessed ? t.c.amb : t.c.acc} bg={guessed ? t.c.ambT : t.c.accT} />
+            ) : null}
           </Row>
-          <Txt style={{ marginTop: 8, fontSize: 17, fontWeight: '600', letterSpacing: -0.19 }}>
-            {GENRE_LABEL[detection.genre]}
-          </Txt>
-          <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 4 }}>
-            {curveName(detection.genre)}
-          </Txt>
+          {typed || override ? (
+            <>
+              <Txt style={{ marginTop: 8, fontSize: 17, fontWeight: '600', letterSpacing: -0.19 }}>
+                {genre === 'physical' ? `Physical (${kind})` : GENRE_LABEL[genre]}
+              </Txt>
+              <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 4 }}>
+                {curveName(genre)}
+              </Txt>
+            </>
+          ) : (
+            <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 8, lineHeight: 19 }}>
+              Name it and the genre follows — or set it yourself below.
+            </Txt>
+          )}
+        </View>
+
+        {genre === 'physical' && (typed || override) ? (
+          <Disclose style={{ marginTop: 16 }}>
+            <Label>Closed or open?</Label>
+            <View style={{ marginTop: 8 }}>
+              <Segmented
+                value={kind}
+                onChange={setKind}
+                options={[
+                  { key: 'closed', label: 'Closed' },
+                  { key: 'open', label: 'Open' },
+                ]}
+              />
+            </View>
+          </Disclose>
+        ) : null}
+
+        <View style={{ marginTop: 16 }}>
+          <Label>Or set it yourself</Label>
+          <Row gap={7} style={{ marginTop: 8, flexWrap: 'wrap' }}>
+            {GENRES.map((g) => (
+              <Chip
+                key={g}
+                label={GENRE_LABEL[g]}
+                selected={(typed || override !== null) && genre === g}
+                onPress={() => setOverride(g)}
+                style={{ minHeight: 34 }}
+              />
+            ))}
+          </Row>
         </View>
 
         <PrimaryButton
@@ -343,10 +400,12 @@ function AddSkillsStep() {
           onPress={() => {
             store.createSkill({
               name,
-              genre: detection.genre,
-              physical_kind: detection.genre === 'physical' ? 'closed' : null,
+              genre,
+              physical_kind: genre === 'physical' ? kind : null,
             });
             setName('');
+            setOverride(null);
+            setKind('closed');
           }}
         />
       </Card>
@@ -402,7 +461,11 @@ function FirstTopicStep() {
 
       <Label style={{ marginTop: 18 }}>Topic</Label>
       <View style={{ marginTop: 8 }}>
-        <Field value={title} onChangeText={setTitle} placeholder="Integration by parts" />
+        <Field
+          value={title}
+          onChangeText={setTitle}
+          placeholder={GENRE_EXAMPLE[skill?.genre ?? 'reasoning'].topic}
+        />
       </View>
       <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 12, lineHeight: 19 }}>
         {note}
@@ -463,7 +526,7 @@ function SummaryStep() {
 
 /* --------------------------------------------------------- register gate */
 
-function RegisterGate({ onNext }: { onNext: () => void }) {
+function RegisterGate({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const t = useTheme();
   const nav = useNav();
   const auth = useAuth();
@@ -479,11 +542,22 @@ function RegisterGate({ onNext }: { onNext: () => void }) {
     <Screen scroll={false} bottomPadding={34} style={{ paddingTop: insets.top + 18 }}>
       <Progress step={4} />
 
-      <Txt style={[type.gateTitle, { marginTop: 30, lineHeight: 37 }]}>
-        Register to <Txt style={[type.wordmark, { fontSize: 30, letterSpacing: -0.72 }]}>Interval</Txt>
+      {/* Same back affordance as every other step — this one is not a one-way door. */}
+      <View style={{ height: 28, justifyContent: 'center', marginTop: 18 }}>
+        <Press
+          onPress={onBack}
+          accessibilityLabel="Back"
+          style={{ width: 28, height: 28, marginLeft: -6, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Back size={16} color={t.c.mut} />
+        </Press>
+      </View>
+
+      <Txt style={[type.gateTitle, { marginTop: 12, lineHeight: 37 }]}>
+        Register with <Txt style={[type.wordmark, { fontSize: 30, letterSpacing: -0.72 }]}>Interval</Txt>
       </Txt>
       <Txt c={t.c.mut} style={{ marginTop: 10, lineHeight: 23, maxWidth: 320 }}>
-        Part two sets up your skills. An account keeps the schedule when the phone doesn't.
+        {`Part two sets up your skills. An account keeps the schedule when the ${DEVICE} doesn't.`}
       </Txt>
 
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 }}>

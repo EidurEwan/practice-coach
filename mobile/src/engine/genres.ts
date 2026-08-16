@@ -9,6 +9,19 @@ export type PhysicalKind = 'closed' | 'open';
 
 export const GENRES: Genre[] = ['reasoning', 'conceptual', 'memorization', 'language', 'physical'];
 
+/**
+ * What a topic and a sub-skill look like for each genre, for use as input
+ * placeholders. A maths example under a language skill reads as though the app
+ * has not noticed what you are studying.
+ */
+export const GENRE_EXAMPLE: Record<Genre, { topic: string; sub: string }> = {
+  reasoning: { topic: 'Integration by parts', sub: 'Choosing u and dv' },
+  conceptual: { topic: 'Enzyme inhibition', sub: 'Competitive vs non-competitive' },
+  memorization: { topic: 'Krebs cycle steps', sub: 'The decarboxylation stages' },
+  language: { topic: 'Irregular preterite', sub: 'The -ir stem changes' },
+  physical: { topic: 'Backhand slice', sub: 'Contact point' },
+};
+
 export const GENRE_LABEL: Record<Genre, string> = {
   reasoning: 'Reasoning',
   conceptual: 'Conceptual',
