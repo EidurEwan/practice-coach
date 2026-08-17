@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthStep, useNav } from '../nav/router';
 import { useStore } from '../store/store';
 import { useAuth } from '../sync/auth';
+import { authError } from '../sync/authError';
 import { syncSummary } from '../sync/sync';
 import { useTheme } from '../theme/theme';
 import { radius } from '../theme/tokens';
@@ -65,7 +66,7 @@ export function AccountScreen({
     setBusy(true);
     setError(null);
     fn()
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => setError(authError(e).message))
       .finally(() => setBusy(false));
   };
 

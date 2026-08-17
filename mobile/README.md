@@ -88,8 +88,36 @@ phone that is signing up, and a link would bounce them into a browser.
 
 A hosted project does not read `config.toml`. There you have to, in the
 dashboard: turn on "Confirm email", set the OTP expiry, paste that template
-into Authentication → Email Templates, and configure SMTP — the built-in
-sender is rate-limited to a handful of messages an hour.
+into Authentication → Email Templates, and configure SMTP.
+
+### Turning accounts on for a hosted project
+
+Two things have to be true, they fail in different places, and they have
+different fixes. `scripts/check-supabase.mjs` tells them apart:
+
+```bash
+node scripts/check-supabase.mjs https://<ref>.supabase.co <anon-key>
+```
+
+1. **The schema has to exist.** Paste
+   `supabase/migrations/20260812000000_init.sql` into the SQL editor, or
+   `supabase link` then `supabase db push`. Every table 404s with `PGRST205`
+   until this is done. A table that answers **401** is correct — it exists and
+   is closed to the anon role, which is what row level security is for.
+2. **The project has to be able to send mail.** Authentication → Emails → SMTP
+   Settings, with any provider (Resend, Brevo, Postmark, SendGrid, or a Gmail
+   app password). Without it, `POST /auth/v1/signup` returns
+   `500 unexpected_failure "Error sending confirmation email"` — for *every*
+   address, including the project owner's, so it is not the built-in sender's
+   own-organisation restriction. Nothing in the app can work around it: the
+   account is created and the confirmation never leaves the server.
+
+The anon key belongs in the client — it ships in the app and RLS is what
+protects the data. The `service_role` key does not, and nothing here needs it.
+
+Environment variables are inlined at bundle time, so after configuring the
+project, rebuild (`npx expo export --platform web`) for the web build to pick
+the change up.
 
 ### Apple and Google
 
