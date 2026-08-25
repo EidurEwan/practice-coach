@@ -1,6 +1,6 @@
 import { emptyDoc } from '../../engine/types';
 import { skill, topic } from '../../engine/__tests__/factory';
-import { mergeDocs, rowsToPush } from '../merge';
+import { mergeDocs, rowsToPush, isNewer } from '../merge';
 
 const early = '2026-08-09T08:00:00.000Z';
 const late = '2026-08-09T20:00:00.000Z';
@@ -71,5 +71,32 @@ describe('merging two devices', () => {
     const theirs = topic({ id: 't', interval_days: 5, updated_at: early });
     const { merged, push } = mergeDocs({ ...emptyDoc(), topics: [mine] }, { ...emptyDoc(), topics: [theirs] });
     expect(rowsToPush(merged, push, 'topics')).toEqual([mine]);
+  });
+});
+
+describe('isNewer', () => {
+  it('treats the two spellings of one instant as equal', () => {
+    // Both came off the device in this project's own database.
+    const pg = '2026-08-13T00:18:28.27632+00:00';
+    const device = '2026-08-13T00:18:28.276Z';
+    expect(isNewer(pg, device)).toBe(false);
+    expect(isNewer(device, pg)).toBe(false);
+  });
+
+  it('compares the moment, not the spelling', () => {
+    expect(isNewer('2026-08-13T00:18:29.000Z', '2026-08-13T00:18:28.9+00:00')).toBe(true);
+    expect(isNewer('2026-08-13T00:18:28.9+00:00', '2026-08-13T00:18:29.000Z')).toBe(false);
+  });
+
+  it('is right about an offset that is not UTC, where sorting the text is not', () => {
+    // 09:00+02:00 is 07:00Z — earlier than 08:00Z, though the text sorts later.
+    const offset = '2026-08-13T09:00:00+02:00';
+    const utc = '2026-08-13T08:00:00.000Z';
+    expect(isNewer(offset, utc)).toBe(false);
+    expect(offset > utc).toBe(true); // what the old string comparison did
+  });
+
+  it('falls back to text rather than throwing on something unparseable', () => {
+    expect(isNewer('not-a-date', 'also-not')).toBe(true);
   });
 });

@@ -102,6 +102,20 @@ function Routes() {
 
       {chrome ? <Header onSettings={() => nav.go({ name: 'settings' })} /> : null}
 
+      {/*
+        Work that is on screen but not on disk is the one thing the app must
+        never keep quiet about — it looks saved, and it is gone on the next
+        launch. This says so while the copy is still recoverable.
+      */}
+      {store.saveError ? (
+        <View style={{ marginHorizontal: 20, marginBottom: 8, padding: 13, borderRadius: 12, backgroundColor: t.c.redT }}>
+          <Txt v="secondary" c={t.c.red} style={{ lineHeight: 19 }}>
+            The last change could not be saved to this device, so it may not survive a restart. Export from Settings to
+            keep a copy.
+          </Txt>
+        </View>
+      ) : null}
+
       {/* Losing the schedule is the one failure worth interrupting for. */}
       {store.loadError ? (
         <View style={{ marginHorizontal: 20, marginBottom: 8, padding: 13, borderRadius: 12, backgroundColor: t.c.redT }}>

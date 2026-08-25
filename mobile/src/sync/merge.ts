@@ -11,6 +11,25 @@ export type MergeResult = {
 type Stamped = { id: string; updated_at: string };
 
 /**
+ * Is `a` a later moment than `b`?
+ *
+ * The two sides do not agree on how to spell a timestamp: Postgres returns
+ * `2026-08-13T00:18:28.27632+00:00` and the device writes
+ * `2026-08-13T00:18:28.276Z` for the very same instant. ISO-8601 happens to
+ * sort lexicographically while both are UTC, so comparing the strings mostly
+ * works — but it stops being true the moment an offset other than +00:00 shows
+ * up, and "mostly" is the wrong standard for the rule that decides which copy
+ * of your work survives. Compare the instants instead, and fall back to the
+ * strings only if something unparseable arrives.
+ */
+export function isNewer(a: string, b: string): boolean {
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return a > b;
+  return ta > tb;
+}
+
+/**
  * The rule shown in the UI: ratings merge by timestamp, latest wins. Applied
  * per row rather than per document, so two devices that were both offline keep
  * everything either of them did.
@@ -31,7 +50,7 @@ export function mergeDocs(local: Doc, remote: Doc): MergeResult {
       if (!theirs) {
         byId.set(row.id, row);
         toPush.push(row);
-      } else if (row.updated_at > theirs.updated_at) {
+      } else if (isNewer(row.updated_at, theirs.updated_at)) {
         byId.set(row.id, row);
         toPush.push(row);
       }
@@ -41,7 +60,7 @@ export function mergeDocs(local: Doc, remote: Doc): MergeResult {
     push[table] = toPush.map((r) => ({ id: r.id, updated_at: r.updated_at }));
   }
 
-  const localNewer = local.settings.updated_at >= remote.settings.updated_at;
+  const localNewer = !isNewer(remote.settings.updated_at, local.settings.updated_at);
   const settings: Settings = localNewer ? local.settings : { ...local.settings, ...remote.settings };
   merged.settings = settings;
 

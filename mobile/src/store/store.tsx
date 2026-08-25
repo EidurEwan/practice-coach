@@ -32,6 +32,8 @@ export type Store = {
   ready: boolean;
   /** Set when the local store could not be read. The app runs, but empty. */
   loadError: string | null;
+  /** The collection whose last save failed, if one did. Work is unsaved. */
+  saveError: string | null;
   doc: Doc;
   day: Day;
   plan: Plan;
@@ -68,18 +70,27 @@ export type Store = {
 
 const StoreContext = createContext<Store | null>(null);
 
-async function openPersistence(): Promise<Persistence> {
+/**
+ * Opening the store must always yield somewhere to write.
+ *
+ * If it does not, every save becomes a no-op while the in-memory document
+ * carries on accepting edits — so the app looks like it is working and loses
+ * everything the moment it restarts. Falling back to the JSON store keeps the
+ * work on the device even when SQLite cannot be opened at all.
+ */
+async function openPersistence(): Promise<{ store: Persistence; degraded: boolean }> {
   // expo-sqlite needs a wasm build and cross-origin isolation on the web; the
   // JSON store keeps the browser preview working without either.
   if (Platform.OS !== 'web') {
     try {
       const { sqlitePersistence } = await import('./sqlite');
-      return await sqlitePersistence();
+      return { store: await sqlitePersistence(), degraded: false };
     } catch (e) {
       console.warn('SQLite unavailable, falling back to the document store', e);
+      return { store: jsonPersistence(), degraded: true };
     }
   }
-  return jsonPersistence();
+  return { store: jsonPersistence(), degraded: false };
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
@@ -88,6 +99,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [day, setDay] = useState<Day>(() => today());
   const [undoable, setUndoable] = useState<UndoEntry | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const store = useRef<Persistence | null>(null);
   const live = useRef<Doc>(doc);
 
@@ -102,19 +114,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let alive = true;
     (async () => {
+      let opened: Persistence | null = null;
       try {
-        const p = await openPersistence();
+        const { store: p, degraded } = await openPersistence();
+        opened = p;
         const loaded = await p.load();
         if (!alive) return;
         store.current = p;
         live.current = loaded;
         setDoc(loaded);
+        if (degraded) setLoadError('Interval could not open its usual database, so it is using a simpler one. Your work is still saved on this device.');
       } catch (e) {
         // A database that will not open or read must not strand the app on a
         // blank screen. Come up empty, say so, and keep the broken file for
         // recovery rather than writing over it.
+        //
+        // It must not leave the app writable with nowhere to write, either:
+        // without a store attached every save silently does nothing, the
+        // screen keeps showing the work, and it is gone on the next launch.
         if (!alive) return;
         console.warn('could not read the local store', e);
+        store.current = opened ?? jsonPersistence();
         setLoadError(e instanceof Error ? e.message : String(e));
       } finally {
         if (alive) setReady(true);
@@ -137,16 +157,43 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  /**
+   * A failed save has to reach the screen.
+   *
+   * The document in memory has already been updated by the time this runs, so
+   * a write that quietly fails leaves the work visible and unsaved — and the
+   * only sign of it was a console warning nobody reads. Worse, `store.current?.`
+   * on a missing store returned undefined, so there was no promise to reject
+   * and not even a warning. Both now say so.
+   */
+  const saved = useCallback((what: string, work: Promise<unknown> | undefined) => {
+    if (!work) {
+      console.warn(`no store attached — ${what} was not saved`);
+      setSaveError(what);
+      return;
+    }
+    work.then(
+      () => setSaveError((prev) => (prev === what ? null : prev)),
+      (e) => {
+        console.warn(`could not save ${what}`, e);
+        setSaveError(what);
+      },
+    );
+  }, []);
+
   const persist = useCallback(
     <K extends CollectionName>(table: K, rows: Collections[K]) => {
-      store.current?.upsert(table, rows).catch((e) => console.warn(`could not save ${table}`, e));
+      saved(table, store.current?.upsert(table, rows));
     },
-    [],
+    [saved],
   );
 
-  const persistSettings = useCallback((settings: Settings) => {
-    store.current?.saveSettings(settings).catch((e) => console.warn('could not save settings', e));
-  }, []);
+  const persistSettings = useCallback(
+    (settings: Settings) => {
+      saved('settings', store.current?.saveSettings(settings));
+    },
+    [saved],
+  );
 
   const patchTopic = useCallback(
     (id: string, patch: Partial<Topic>): Topic | null => {
@@ -357,6 +404,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return {
       ready,
       loadError,
+      saveError,
       revision,
       doc,
       day,
@@ -389,8 +437,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       replaceDoc,
     };
   }, [
-    createSkill, day, doc, logStudy, patchSkill, patchTopic, rate, ready,
-    redistributeToday, replaceDoc, revision, undo, undoable, updateSettings, commit,
+    createSkill, day, doc, loadError, logStudy, patchSkill, patchTopic, rate, ready,
+    redistributeToday, replaceDoc, revision, saveError, undo, undoable, updateSettings, commit,
   ]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

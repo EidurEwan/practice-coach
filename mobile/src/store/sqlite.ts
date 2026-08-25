@@ -88,6 +88,72 @@ const COLUMNS: Record<CollectionName, string[]> = {
   pairs: ['id', 'topic_a', 'topic_b', 'created_at', 'updated_at'],
 };
 
+/**
+ * How to add each column to a table that predates it.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so
+ * a database written by an older build keeps that build's columns forever.
+ * Every insert then fails with "no such column", and because the in-memory doc
+ * has already been updated the row looks saved until the app is restarted.
+ *
+ * SQLite needs a non-null default to add a NOT NULL column to a table with
+ * rows in it, so each one carries the default the schema gives it.
+ */
+const COLUMN_DDL: Record<CollectionName, Record<string, string>> = {
+  skills: {
+    id: 'TEXT', name: 'TEXT', genre: 'TEXT', physical_kind: 'TEXT',
+    hue_index: 'INTEGER NOT NULL DEFAULT 0', archived_at: 'TEXT',
+    created_at: 'TEXT', updated_at: 'TEXT',
+  },
+  topics: {
+    id: 'TEXT', skill_id: 'TEXT', title: 'TEXT', sub_skill: 'TEXT',
+    state: "TEXT NOT NULL DEFAULT 'new'",
+    interval_days: 'REAL NOT NULL DEFAULT 1',
+    ease: 'REAL NOT NULL DEFAULT 2.5',
+    repetition: 'INTEGER NOT NULL DEFAULT 0',
+    streak: 'INTEGER NOT NULL DEFAULT 0',
+    penalty: 'REAL NOT NULL DEFAULT 1',
+    format_rung: 'INTEGER NOT NULL DEFAULT 0',
+    due_on: "TEXT NOT NULL DEFAULT ''",
+    last_reviewed_at: 'TEXT', archived_at: 'TEXT',
+    created_at: 'TEXT', updated_at: 'TEXT',
+  },
+  reviews: {
+    id: 'TEXT', topic_id: 'TEXT', rating: 'TEXT',
+    felt_shaky: 'INTEGER NOT NULL DEFAULT 0',
+    rated_at: 'TEXT', prev_interval: 'REAL NOT NULL DEFAULT 0',
+    next_interval: 'REAL NOT NULL DEFAULT 0', updated_at: 'TEXT',
+  },
+  log_entries: {
+    id: 'TEXT', skill_id: 'TEXT', topic_id: 'TEXT', sub_skill: 'TEXT',
+    studied_on: "TEXT NOT NULL DEFAULT ''",
+    flags: "TEXT NOT NULL DEFAULT '[]'",
+    created_at: 'TEXT', updated_at: 'TEXT',
+  },
+  pairs: {
+    id: 'TEXT', topic_a: 'TEXT', topic_b: 'TEXT', created_at: 'TEXT', updated_at: 'TEXT',
+  },
+};
+
+/**
+ * Brings an existing database up to the current schema. Returns the columns it
+ * had to add, so a silent repair is still visible in the logs.
+ */
+async function migrate(db: SQLite.SQLiteDatabase): Promise<string[]> {
+  const added: string[] = [];
+  for (const table of COLLECTIONS) {
+    const info = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+    if (!info.length) continue; // Freshly created by SCHEMA; nothing to reconcile.
+    const have = new Set(info.map((c) => c.name));
+    for (const col of COLUMNS[table]) {
+      if (have.has(col)) continue;
+      await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${col} ${COLUMN_DDL[table][col]}`);
+      added.push(`${table}.${col}`);
+    }
+  }
+  return added;
+}
+
 type Row = Record<string, unknown>;
 
 /** SQLite has no booleans and no arrays; these two are the only conversions. */
@@ -109,6 +175,9 @@ function fromRow(table: CollectionName, row: Row): Row {
 export async function sqlitePersistence(): Promise<Persistence> {
   const db = await SQLite.openDatabaseAsync(DB_NAME);
   await db.execAsync(SCHEMA);
+
+  const added = await migrate(db);
+  if (added.length) console.warn(`interval.db was missing ${added.length} column(s), added: ${added.join(', ')}`);
 
   /**
    * One write at a time. A single log can fan out into three writes that are
@@ -179,15 +248,31 @@ export async function sqlitePersistence(): Promise<Persistence> {
 
     saveSettings,
 
+    /**
+     * Swap the whole document in one transaction.
+     *
+     * This used to delete every table, commit, and only then re-insert. A
+     * failure anywhere in the second half — one bad column, one bad row — left
+     * the database emptier than it started, with no way back, and it runs on
+     * every sync. Deleting and re-inserting inside a single exclusive
+     * transaction means a failure rolls back to the previous contents instead.
+     */
     async replace(doc: Doc) {
-      // Each step enqueues on its own — nesting `serial` inside `serial` would
-      // wait on a queue entry that cannot finish until this one does.
       await serial(async () => {
         await db.withExclusiveTransactionAsync(async (tx) => {
           for (const table of COLLECTIONS) await tx.runAsync(`DELETE FROM ${table}`);
+
+          for (const table of COLLECTIONS) {
+            const rows = doc[table] as unknown as Row[];
+            if (!rows.length) continue;
+            const cols = COLUMNS[table];
+            const sql = `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
+            for (const row of rows) {
+              await tx.runAsync(sql, toRow(table, row) as SQLite.SQLiteBindValue[]);
+            }
+          }
         });
       });
-      for (const table of COLLECTIONS) await upsert(table, doc[table] as never);
       await saveSettings(doc.settings);
     },
 
