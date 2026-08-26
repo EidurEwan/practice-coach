@@ -242,13 +242,19 @@ export function TabBar({ dueCount }: { dueCount: number }) {
                       justifyContent: 'center',
                     }}
                   >
-                    <Txt v="badge" c={t.c.accFg} style={{ fontSize: 10 }}>
+                    <Txt v="badge" c={t.c.accFg} style={{ fontSize: 10 }} maxFontSizeMultiplier={1.3}>
                       {dueCount}
                     </Txt>
                   </View>
                 ) : null}
               </View>
-              <Txt v="tab" c={color}>
+              {/*
+                The bar is a fixed 60px by design, so its label cannot grow
+                without being clipped. Capping the multiplier lets it follow
+                the reader's text size as far as the geometry allows, and stop
+                there — content elsewhere still scales all the way.
+              */}
+              <Txt v="tab" c={color} maxFontSizeMultiplier={1.3}>
                 {label}
               </Txt>
             </Pressable>

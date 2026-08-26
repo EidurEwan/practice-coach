@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Pressable, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthStep, useNav } from '../nav/router';
 import { useStore } from '../store/store';
@@ -148,7 +148,18 @@ export function AccountScreen({
         {step === 'verify' && email ? `Six digits sent to ${email}. They expire in ten minutes.` : body}
       </Txt>
 
-      <View style={{ flex: 1, minHeight: 0 }}>
+      {/*
+        The middle scrolls; the button stays put. Without this the content is
+        simply taller than the space on a short screen, and whatever is at the
+        bottom of it ends up underneath the pinned block — which is how a long
+        error message became the one thing you could not read.
+      */}
+      <ScrollView
+        style={{ flex: 1, minHeight: 0 }}
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {step === 'welcome' ? (
           <>
             <View style={{ marginTop: 22, gap: 9 }}>
@@ -242,7 +253,7 @@ export function AccountScreen({
           </Card>
         ) : null}
 
-      </View>
+      </ScrollView>
 
       <View style={{ gap: 8 }}>
         {/*
