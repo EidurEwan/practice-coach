@@ -14,3 +14,6 @@ npm-debug.log*
 
 # The Expo web export is committed at the root because GitHub Pages serves
 # `main` from `/`. Its source is in mobile/.
+
+# Playwright MCP scratch output
+.playwright-mcp/
