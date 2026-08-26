@@ -6,7 +6,7 @@ offline-first, with Supabase as a backup and merge target rather than a gate.
 ```bash
 npm install
 npm start          # then i / a / w
-npm test           # 81 engine, merge and navigation tests
+npm test           # 116 tests — engine, merge, nav, persistence, reminders
 npm run typecheck
 ```
 
