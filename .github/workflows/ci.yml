@@ -1,0 +1,42 @@
+name: CI
+
+# The tests only protect anything if something runs them. They cover the
+# scheduler, the merge, navigation, the band colours and the persistence
+# repairs — all the parts where a regression is silent rather than loud.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test -- --ci
+
+      # The web bundle is committed at the repo root because Pages serves main
+      # from /. Building here catches a source change that cannot ship before
+      # it is merged, without depending on anyone remembering to rebuild.
+      - name: Web bundle builds
+        run: npx expo export --platform web --output-dir /tmp/web-ci
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ''
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ''

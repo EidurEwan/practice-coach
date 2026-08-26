@@ -17,6 +17,7 @@ import { StoreProvider, useStore } from './store/store';
 import { AuthProvider } from './sync/auth';
 import { RATING_LABEL } from './theme/colors';
 import { ThemeProvider, useTheme } from './theme/theme';
+import { Boundary } from './ui/Boundary';
 import { Txt } from './ui/primitives';
 import { Header, TabBar, UndoToast, Wash } from './ui/shell';
 
@@ -33,9 +34,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StoreProvider>
-        <Themed ready={fontsLoaded} />
-      </StoreProvider>
+      <Boundary>
+        <StoreProvider>
+          <Themed ready={fontsLoaded} />
+        </StoreProvider>
+      </Boundary>
     </SafeAreaProvider>
   );
 }
@@ -71,7 +74,14 @@ function Shell({ ready }: { ready: boolean }) {
 
   return (
     <NavProvider initial={initial}>
-      <Routes />
+      {/*
+        A second boundary, inside the store, so a screen that throws can still
+        hand back everything logged so far. The outer one catches what happens
+        above this and has nothing to offer but an apology.
+      */}
+      <Boundary snapshot={store.exportJson}>
+        <Routes />
+      </Boundary>
     </NavProvider>
   );
 }
