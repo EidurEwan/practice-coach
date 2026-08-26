@@ -191,6 +191,27 @@ instead:
 adb shell uiautomator dump /sdcard/ui.xml   # then match text -> bounds -> tap
 ```
 
+## Reminders and feedback
+
+A schedule that rebuilds itself every morning is no use if nothing says so, so
+there is an optional daily reminder (Settings → Daily reminder). Two rules it
+keeps, both tested in `src/notify/__tests__`:
+
+- **It never nags about nothing.** Days with nothing due are skipped, rather
+  than buzzing to say there is no work.
+- **It never claims a number it cannot keep.** The count comes from the same
+  `buildPlan` the screen uses, and the whole week is rescheduled whenever the
+  schedule changes — clear the last thing due and tomorrow's reminder already
+  knows.
+
+The decisions live in `src/notify/reminders.ts`, which is pure and testable
+without a notification service; `src/notify/schedule.ts` is the only part that
+touches the OS, and it loads `expo-notifications` lazily so a build made before
+that module existed degrades to no reminders rather than to a white screen.
+
+Ratings, logs, undo and failures also answer in the hand (`src/ui/feedback.ts`).
+Clearing the last thing due gets a different feel from the rating before it.
+
 ## Not built
 
 - Apple and Google sign-in are wired but unverified — they need a real Supabase

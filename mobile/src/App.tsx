@@ -18,6 +18,8 @@ import { AuthProvider } from './sync/auth';
 import { RATING_LABEL } from './theme/colors';
 import { ThemeProvider, useTheme } from './theme/theme';
 import { Boundary } from './ui/Boundary';
+import { useReminders } from './notify/useReminders';
+import { reverted } from './ui/feedback';
 import { Txt } from './ui/primitives';
 import { Header, TabBar, UndoToast, Wash } from './ui/shell';
 
@@ -90,6 +92,9 @@ function Routes() {
   const t = useTheme();
   const nav = useNav();
   const store = useStore();
+
+  // What is scheduled has to follow what is due, or it starts telling lies.
+  useReminders();
   const { route } = nav;
   const chrome = route.name !== 'onboarding' && route.name !== 'account';
 
@@ -151,7 +156,10 @@ function Routes() {
       {store.undoable ? (
         <UndoToast
           text={`${store.undoable.title} — ${RATING_LABEL[store.undoable.rating].toLowerCase()}, ${backIn(store.undoable.nextInterval)}`}
-          onUndo={store.undo}
+          onUndo={() => {
+            reverted();
+            store.undo();
+          }}
         />
       ) : null}
 

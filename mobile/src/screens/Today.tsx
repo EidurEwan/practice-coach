@@ -10,6 +10,7 @@ import { bandColor, flagColors, RATING_HELP, RATING_LABEL, ratingColors } from '
 import { useTheme } from '../theme/theme';
 import { radius } from '../theme/tokens';
 import { useStore } from '../store/store';
+import { finished, tapped } from '../ui/feedback';
 import { RecallChart, useRecall } from '../ui/charts';
 import { Check, Chevron, Forward } from '../ui/icons';
 import { Badge, CapacityBar, Card, Disclose, Dot, Label, Pips, Press, Row, Txt } from '../ui/primitives';
@@ -54,7 +55,13 @@ export function TodayScreen() {
   };
 
   const rate = (item: PlanItem, rating: Rating) => {
+    // Clearing the last thing due is the one moment in the day worth marking,
+    // so it gets a different feel from the rating before it. Read the count
+    // before the store changes it.
+    const last = store.plan.focus.length <= 1;
     store.rate(item.topic.id, rating);
+    if (last) finished();
+    else tapped();
     setOpenId(null);
     setWhyOpen(false);
   };

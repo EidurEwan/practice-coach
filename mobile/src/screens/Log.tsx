@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { addDays, backIn, daysBetween, formatShort, inWords, relativePast } from '../engine/dates';
 import { GENRE_EXAMPLE, methodFor } from '../engine/genres';
+import { committed } from '../ui/feedback';
 import { badgeFor } from '../engine/plan';
 import { applyLog, firstInterval } from '../engine/schedule';
 import { useNav } from '../nav/router';
@@ -79,6 +80,7 @@ export function LogScreen() {
       studiedOn,
       confusableWith: Object.keys(pairs).filter((k) => pairs[k]),
     });
+    committed();
     setSaved(topic.title);
     setTitle('');
     setSub('');

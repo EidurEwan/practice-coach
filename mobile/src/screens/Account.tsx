@@ -11,6 +11,7 @@ import { radius } from '../theme/tokens';
 import { AppleMark, Back, Check, GoogleMark } from '../ui/icons';
 import { Card, Field, Label, Press, PrimaryButton, Row, TextButton, Txt } from '../ui/primitives';
 import { DEVICE, ON_DEVICE } from '../ui/copy';
+import { failed } from '../ui/feedback';
 import { Screen } from '../ui/shell';
 
 const COPY: Record<AuthStep, [string, string, string]> = {
@@ -66,7 +67,10 @@ export function AccountScreen({
     setBusy(true);
     setError(null);
     fn()
-      .catch((e: unknown) => setError(authError(e).message))
+      .catch((e: unknown) => {
+        failed();
+        setError(authError(e).message);
+      })
       .finally(() => setBusy(false));
   };
 

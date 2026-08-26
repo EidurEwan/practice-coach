@@ -1,11 +1,13 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Platform, Share, View } from 'react-native';
 import { formatWithYear, parseDay, toDay } from '../engine/dates';
 import { ThemeChoice } from '../engine/types';
 import { useNav } from '../nav/router';
 import { useStore } from '../store/store';
 import { useAuth } from '../sync/auth';
+import { DEFAULT_REMINDERS, ReminderPrefs, timeLabel } from '../notify/reminders';
+import { applyReminders, ensurePermission, loadPrefs, savePrefs } from '../notify/schedule';
 import { syncSummary } from '../sync/sync';
 import { useTheme } from '../theme/theme';
 import { ON_DEVICE } from '../ui/copy';
@@ -19,6 +21,7 @@ import {
   PrimaryButton,
   Row,
   Segmented,
+  Toggle,
   TextButton,
   Txt,
 } from '../ui/primitives';
@@ -33,6 +36,46 @@ export function SettingsScreen() {
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
   const [pickingDate, setPickingDate] = useState(false);
+  const [reminders, setReminders] = useState(DEFAULT_REMINDERS);
+  const [reminderNote, setReminderNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadPrefs().then(setReminders);
+  }, []);
+
+  /**
+   * Rescheduling here as well as on the store's own changes is deliberate:
+   * turning them on should take effect now, not at the next rating.
+   */
+  const applyPrefs = async (next: ReminderPrefs) => {
+    setReminders(next);
+    await savePrefs(next);
+    const count = await applyReminders(store.doc, next, store.day);
+    setReminderNote(
+      !next.enabled
+        ? null
+        : count === 0
+          ? 'Nothing is due in the next week, so nothing is scheduled yet.'
+          : count === 1
+            ? 'One reminder scheduled for the week ahead.'
+            : `${count} reminders scheduled for the week ahead.`,
+    );
+  };
+
+  const toggleReminders = async (enabled: boolean) => {
+    if (!enabled) return applyPrefs({ ...reminders, enabled: false });
+
+    // Ask only at the moment it has a reason, rather than on first launch.
+    const granted = await ensurePermission();
+    if (!granted) {
+      setReminders({ ...reminders, enabled: false });
+      setReminderNote('Notifications are turned off for Interval in your system settings.');
+      return;
+    }
+    await applyPrefs({ ...reminders, enabled: true });
+  };
+
+  const setReminderTime = (time: string) => void applyPrefs({ ...reminders, time });
 
   const initials = auth.email ? auth.email.slice(0, 2).toUpperCase() : '—';
   const syncedAt = auth.sync.at ? relativeMinutes(auth.sync.at) : null;
@@ -186,6 +229,44 @@ export function SettingsScreen() {
                     setPickingDate(false);
                   }}
                 />
+              ) : null}
+            </Disclose>
+          ) : null}
+        </View>
+
+        {/*
+          A schedule that rebuilds itself every morning is no use if nothing
+          tells you it has. The times offered are the ones a school day has
+          room in — before it, after it, and the evening.
+        */}
+        <View style={{ paddingVertical: 15, borderTopWidth: 1, borderTopColor: t.c.line }}>
+          <Row gap={10}>
+            <View style={{ flex: 1 }}>
+              <Txt>Daily reminder</Txt>
+              <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 2 }}>
+                {reminders.enabled
+                  ? `At ${timeLabel(reminders.time)}, only on days with something due`
+                  : 'Nothing will interrupt you'}
+              </Txt>
+            </View>
+            <Toggle value={reminders.enabled} onChange={toggleReminders} />
+          </Row>
+          {reminders.enabled ? (
+            <Disclose style={{ marginTop: 12 }}>
+              <Segmented
+                value={reminders.time}
+                onChange={(time) => setReminderTime(time)}
+                options={[
+                  { key: '07:00', label: '7 am' },
+                  { key: '08:00', label: '8 am' },
+                  { key: '16:00', label: '4 pm' },
+                  { key: '19:30', label: '7:30 pm' },
+                ]}
+              />
+              {reminderNote ? (
+                <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 8, lineHeight: 19 }}>
+                  {reminderNote}
+                </Txt>
               ) : null}
             </Disclose>
           ) : null}
