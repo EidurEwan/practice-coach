@@ -1,12 +1,13 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useState } from 'react';
-import { Alert, Platform, Share, View } from 'react-native';
+import { Platform, Share, View } from 'react-native';
 import { formatWithYear, parseDay, toDay } from '../engine/dates';
 import { ThemeChoice } from '../engine/types';
 import { useNav } from '../nav/router';
 import { useStore } from '../store/store';
 import { useAuth } from '../sync/auth';
 import { DEFAULT_REMINDERS, ReminderPrefs, timeLabel } from '../notify/reminders';
+import { ask, tell } from '../ui/dialog';
 import { applyReminders, ensurePermission, loadPrefs, savePrefs } from '../notify/schedule';
 import { syncSummary } from '../sync/sync';
 import { useTheme } from '../theme/theme';
@@ -89,11 +90,9 @@ export function SettingsScreen() {
     }
   };
 
-  const confirm = (title: string, body: string, label: string, action: () => void) =>
-    Alert.alert(title, body, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: label, style: 'destructive', onPress: action },
-    ]);
+  const confirm = async (title: string, body: string, label: string, action: () => void) => {
+    if (await ask(title, body, label)) action();
+  };
 
   return (
     <Screen>
@@ -345,7 +344,7 @@ export function SettingsScreen() {
               `Removes the copy on the server within 30 days. What is ${ON_DEVICE} stays until you erase it.`,
               'Delete',
               () => {
-                auth.deleteAccount().catch((e) => Alert.alert('Could not delete the account', String(e.message ?? e)));
+                auth.deleteAccount().catch((e) => tell('Could not delete the account', String(e.message ?? e)));
               },
             )
           }
@@ -398,7 +397,7 @@ export function SettingsScreen() {
               setImportText('');
               setImportOpen(false);
             } catch {
-              Alert.alert('That is not a valid export', 'The file should be the JSON produced by Export everything.');
+              tell('That is not a valid export', 'The file should be the JSON produced by Export everything.');
             }
           }}
         />

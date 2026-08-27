@@ -12,6 +12,26 @@ const KEY = 'interval:v1';
 export function jsonPersistence(): Persistence {
   let cache: Doc | null = null;
 
+  /**
+   * One write at a time.
+   *
+   * Every operation here is a read-modify-write of the whole document, and the
+   * store fires several without awaiting them — logging one topic writes the
+   * topic, the log entry and any pairs in the same tick. Started together,
+   * each reads before the others have written, so all of them build on the
+   * same stale copy and whichever finishes last silently erases the rest.
+   *
+   * That is what made logged topics vanish on reload while still showing on
+   * screen: the in-memory document was right and the saved one had dropped a
+   * collection. Queuing means each read sees the write before it.
+   */
+  let tail: Promise<unknown> = Promise.resolve();
+  const serial = <T,>(work: () => Promise<T>): Promise<T> => {
+    const next = tail.then(work, work);
+    tail = next.catch(() => undefined);
+    return next;
+  };
+
   const read = async (): Promise<Doc> => {
     if (cache) return cache;
     const raw = await AsyncStorage.getItem(KEY);
@@ -25,34 +45,42 @@ export function jsonPersistence(): Persistence {
   };
 
   return {
-    async load() {
-      return read();
+    load() {
+      return serial(read);
     },
 
-    async upsert<K extends CollectionName>(table: K, rows: Collections[K]) {
-      const doc = await read();
-      const byId = new Map<string, { id: string }>((doc[table] as { id: string }[]).map((r) => [r.id, r]));
-      for (const row of rows as { id: string }[]) byId.set(row.id, row);
-      await write({ ...doc, [table]: [...byId.values()] } as Doc);
+    upsert<K extends CollectionName>(table: K, rows: Collections[K]) {
+      return serial(async () => {
+        const doc = await read();
+        const byId = new Map<string, { id: string }>((doc[table] as { id: string }[]).map((r) => [r.id, r]));
+        for (const row of rows as { id: string }[]) byId.set(row.id, row);
+        await write({ ...doc, [table]: [...byId.values()] } as Doc);
+      });
     },
 
-    async remove(table: CollectionName, ids: string[]) {
-      const doc = await read();
-      const gone = new Set(ids);
-      await write({ ...doc, [table]: (doc[table] as { id: string }[]).filter((r) => !gone.has(r.id)) } as Doc);
+    remove(table: CollectionName, ids: string[]) {
+      return serial(async () => {
+        const doc = await read();
+        const gone = new Set(ids);
+        await write({ ...doc, [table]: (doc[table] as { id: string }[]).filter((r) => !gone.has(r.id)) } as Doc);
+      });
     },
 
-    async saveSettings(settings: Settings) {
-      await write({ ...(await read()), settings });
+    saveSettings(settings: Settings) {
+      return serial(async () => {
+        await write({ ...(await read()), settings });
+      });
     },
 
-    async replace(doc: Doc) {
-      await write(doc);
+    replace(doc: Doc) {
+      return serial(() => write(doc));
     },
 
-    async reset() {
-      cache = null;
-      await AsyncStorage.removeItem(KEY);
+    reset() {
+      return serial(async () => {
+        cache = null;
+        await AsyncStorage.removeItem(KEY);
+      });
     },
   };
 }
