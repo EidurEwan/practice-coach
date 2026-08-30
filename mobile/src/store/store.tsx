@@ -6,6 +6,7 @@ import { buildPlan, Plan, redistribute } from '../engine/plan';
 import { applyLog, applyRating, newTopicDefaults } from '../engine/schedule';
 import { Doc, emptyDoc, LogEntry, Pair, Rating, Review, Settings, Skill, Topic } from '../engine/types';
 import { jsonPersistence } from './json';
+import { parseDocument, serialiseForExport } from './format';
 import { CollectionName, Collections, Persistence } from './persistence';
 import { nowIso, uid } from './uid';
 
@@ -44,6 +45,10 @@ export type Store = {
   setSkillGenre: (id: string, genre: Genre, kind: PhysicalKind | null) => void;
   archiveSkill: (id: string) => void;
   restoreSkill: (id: string) => void;
+  /** What a delete would take with it, for the confirmation to state. */
+  skillFootprint: (id: string) => { topics: number; ratings: number; logs: number };
+  /** Permanent, and cascades. Archiving is still the reversible option. */
+  deleteSkill: (id: string) => Promise<void>;
 
   logStudy: (input: LogInput) => Topic;
   editTopic: (id: string, title: string) => void;
@@ -415,6 +420,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setSkillGenre: (id, genre, kind) => patchSkill(id, { genre, physical_kind: kind }),
       archiveSkill: (id) => patchSkill(id, { archived_at: nowIso() }),
       restoreSkill: (id) => patchSkill(id, { archived_at: null }),
+
+      skillFootprint: (id) => {
+        const topicIds = new Set(live.current.topics.filter((x) => x.skill_id === id).map((x) => x.id));
+        return {
+          topics: topicIds.size,
+          ratings: live.current.reviews.filter((r) => topicIds.has(r.topic_id)).length,
+          logs: live.current.log_entries.filter((e) => e.skill_id === id).length,
+        };
+      },
+
+      /**
+       * Removes a skill and everything that only existed because of it.
+       *
+       * Leaving the topics behind would strand them: nothing lists a topic
+       * whose skill is gone, so they would be invisible and undeletable, and
+       * the reviews under them would keep counting toward a history nobody
+       * can see. The cascade matches the server's `on delete cascade`, so a
+       * device and its backup agree about what a deletion means.
+       */
+      deleteSkill: async (id) => {
+        const doomedTopics = live.current.topics.filter((x) => x.skill_id === id).map((x) => x.id);
+        const topicIds = new Set(doomedTopics);
+
+        const next: Doc = {
+          ...live.current,
+          skills: live.current.skills.filter((s) => s.id !== id),
+          topics: live.current.topics.filter((x) => x.skill_id !== id),
+          reviews: live.current.reviews.filter((r) => !topicIds.has(r.topic_id)),
+          log_entries: live.current.log_entries.filter((e) => e.skill_id !== id),
+          pairs: live.current.pairs.filter((p) => !topicIds.has(p.topic_a) && !topicIds.has(p.topic_b)),
+        };
+
+        commit(next);
+        setUndoable(null);
+        await store.current?.replace(next);
+      },
       logStudy,
       editTopic: (id, title) => patchTopic(id, { title: title.trim() }),
       archiveTopic: (id) => patchTopic(id, { archived_at: nowIso() }),
@@ -424,10 +465,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dismissUndo: () => setUndoable(null),
       redistributeToday,
       updateSettings,
-      exportJson: () => JSON.stringify(live.current, null, 2),
+      // Exports carry the same envelope storage uses, and go back in through
+      // the same parser — so a file written by an older build still imports,
+      // and one written today will still import later.
+      exportJson: () => serialiseForExport(live.current),
       importJson: async (raw: string) => {
-        const parsed = { ...emptyDoc(), ...(JSON.parse(raw) as Doc) };
-        await replaceDoc(parsed);
+        await replaceDoc(parseDocument(raw).doc);
       },
       eraseEverything: async () => {
         commit(emptyDoc());

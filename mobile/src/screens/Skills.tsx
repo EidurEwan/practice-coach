@@ -38,6 +38,7 @@ export function SkillsScreen() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const skills = doc.skills.filter((s) => !s.archived_at);
   const archived = doc.skills.filter((s) => s.archived_at);
@@ -103,6 +104,10 @@ export function SkillsScreen() {
               setMenuId(null);
               setOpenId(null);
             }}
+            onDelete={() => {
+              setMenuId(null);
+              setDeletingId(skill.id);
+            }}
           />
         ))}
       </View>
@@ -152,11 +157,90 @@ export function SkillsScreen() {
       ) : null}
 
       <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 14, textAlign: 'center' }}>
-        Archived skills and topics are kept, never deleted.
+        Archiving keeps everything. Deleting a skill removes its topics and ratings for good.
       </Txt>
 
       <NewSkillSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <DeleteSkillSheet skillId={deletingId} onClose={() => setDeletingId(null)} />
     </Screen>
+  );
+}
+
+/* ------------------------------------------------- delete confirmation */
+
+/**
+ * Deleting a skill takes its topics, their ratings and their history with it,
+ * so the confirmation counts them out loud before it happens rather than
+ * saying "are you sure". It also offers Archive, because in almost every case
+ * that is what was actually wanted — the screen's own footer has always
+ * promised archived work is kept, and this is the one place that promise is
+ * about to be broken on purpose.
+ */
+function DeleteSkillSheet({ skillId, onClose }: { skillId: string | null; onClose: () => void }) {
+  const t = useTheme();
+  const store = useStore();
+  const skill = store.doc.skills.find((s) => s.id === skillId);
+  const [busy, setBusy] = useState(false);
+
+  if (!skill) return <Sheet open={false} onClose={onClose}><View /></Sheet>;
+
+  const { topics, ratings, logs } = store.skillFootprint(skill.id);
+  const counts = [
+    `${topics} ${topics === 1 ? 'topic' : 'topics'}`,
+    `${ratings} ${ratings === 1 ? 'rating' : 'ratings'}`,
+    `${logs} ${logs === 1 ? 'logged session' : 'logged sessions'}`,
+  ];
+
+  return (
+    <Sheet open onClose={onClose}>
+      <Txt v="sheetTitle">Delete {skill.name}?</Txt>
+      <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 4, lineHeight: 19 }}>
+        This cannot be undone, and it is not what Archive does.
+      </Txt>
+
+      <View style={{ marginTop: 16, borderRadius: radius.button, padding: 16, backgroundColor: t.c.redT }}>
+        <Txt v="label" c={t.c.red}>
+          Deleted with it
+        </Txt>
+        {counts.map((line) => (
+          <Txt key={line} c={t.c.red} style={{ marginTop: 6, fontSize: 15 }}>
+            {line}
+          </Txt>
+        ))}
+      </View>
+
+      <Txt v="secondary" c={t.c.mut} style={{ marginTop: 14, lineHeight: 19 }}>
+        Archiving keeps all of it and takes the skill off your list, which is usually what you want. Export from
+        Settings first if you are unsure.
+      </Txt>
+
+      <PrimaryButton
+        label="Archive instead"
+        tone="surface"
+        style={{ marginTop: 18 }}
+        onPress={() => {
+          store.archiveSkill(skill.id);
+          onClose();
+        }}
+      />
+      <PrimaryButton
+        label={busy ? 'Deleting…' : `Delete ${skill.name}`}
+        tone="danger"
+        disabled={busy}
+        style={{ marginTop: 9 }}
+        onPress={() => {
+          setBusy(true);
+          store
+            .deleteSkill(skill.id)
+            .catch(() => undefined)
+            .finally(() => {
+              setBusy(false);
+              onClose();
+            });
+        }}
+      />
+      <TextButton label="Keep it" onPress={onClose} />
+    </Sheet>
   );
 }
 
@@ -191,6 +275,7 @@ function SkillCard({
   onCommitRename,
   onCancelRename,
   onArchive,
+  onDelete,
 }: {
   skill: Skill;
   index: number;
@@ -205,6 +290,7 @@ function SkillCard({
   onCommitRename: () => void;
   onCancelRename: () => void;
   onArchive: () => void;
+  onDelete: () => void;
 }) {
   const t = useTheme();
   const store = useStore();
@@ -279,8 +365,15 @@ function SkillCard({
               onPress={onArchive}
               style={{ minHeight: 40, borderRadius: 9, paddingHorizontal: 12, justifyContent: 'center' }}
             >
+              <Txt style={{ fontSize: 14 }}>Archive skill</Txt>
+            </Press>
+            <Press
+              scale={1}
+              onPress={onDelete}
+              style={{ minHeight: 40, borderRadius: 9, paddingHorizontal: 12, justifyContent: 'center' }}
+            >
               <Txt style={{ fontSize: 14 }} c={t.c.red}>
-                Archive skill
+                Delete skill
               </Txt>
             </Press>
           </Disclose>

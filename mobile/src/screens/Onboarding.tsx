@@ -26,6 +26,7 @@ import {
   TextButton,
   Txt,
 } from '../ui/primitives';
+import { ACCOUNTS_ENABLED, ACCOUNTS_SOON_BODY } from '../sync/availability';
 import { DEVICE } from '../ui/copy';
 import { Logo, Screen } from '../ui/shell';
 
@@ -554,41 +555,61 @@ function RegisterGate({ onNext, onBack }: { onNext: () => void; onBack: () => vo
       </View>
 
       <Txt style={[type.gateTitle, { marginTop: 12, lineHeight: 37 }]}>
-        Register with <Txt style={[type.wordmark, { fontSize: 30, letterSpacing: -0.72 }]}>Interval</Txt>
+        {ACCOUNTS_ENABLED ? 'Register with ' : 'This is '}
+        <Txt style={[type.wordmark, { fontSize: 30, letterSpacing: -0.72 }]}>Interval</Txt>
       </Txt>
       <Txt c={t.c.mut} style={{ marginTop: 10, lineHeight: 23, maxWidth: 320 }}>
-        {`Part two sets up your skills. An account keeps the schedule when the ${DEVICE} doesn't.`}
+        {ACCOUNTS_ENABLED
+          ? `Part two sets up your skills. An account keeps the schedule when the ${DEVICE} doesn't.`
+          : 'Part two sets up your skills.'}
       </Txt>
 
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 }}>
         <Logo size={92} />
       </View>
 
-      <View style={{ gap: 9 }}>
-        {auth.appleAvailable ? (
+      {/*
+        Three sign-in buttons that all end in a server error would be the worst
+        moment in the app to hit. Until accounts work, the step says so plainly
+        and carries straight on — setup does not depend on one.
+      */}
+      {ACCOUNTS_ENABLED ? (
+        <View style={{ gap: 9 }}>
+          {auth.appleAvailable ? (
+            <PrimaryButton
+              label="Continue with Apple"
+              tone="dark"
+              icon={<AppleMark color={t.c.bg} />}
+              onPress={attempt(() => auth.signInWithApple())}
+              style={{ minHeight: 52 }}
+            />
+          ) : null}
           <PrimaryButton
-            label="Continue with Apple"
-            tone="dark"
-            icon={<AppleMark color={t.c.bg} />}
-            onPress={attempt(() => auth.signInWithApple())}
+            label="Continue with Google"
+            tone="surface"
+            icon={<GoogleMark />}
+            onPress={attempt(() => auth.signInWithGoogle())}
             style={{ minHeight: 52 }}
           />
-        ) : null}
-        <PrimaryButton
-          label="Continue with Google"
-          tone="surface"
-          icon={<GoogleMark />}
-          onPress={attempt(() => auth.signInWithGoogle())}
-          style={{ minHeight: 52 }}
-        />
-        <PrimaryButton
-          label="Register with email"
-          onPress={() => nav.go({ name: 'account', from: 'onboarding', step: 'create' })}
-          style={{ minHeight: 52 }}
-        />
-        <TextButton label="I already have an account — sign in" onPress={() => nav.go({ name: 'account', from: 'onboarding', step: 'welcome' })} />
-        <TextButton label="Not now — carry on offline" color={t.c.fnt} onPress={onNext} />
-      </View>
+          <PrimaryButton
+            label="Register with email"
+            onPress={() => nav.go({ name: 'account', from: 'onboarding', step: 'create' })}
+            style={{ minHeight: 52 }}
+          />
+          <TextButton label="I already have an account — sign in" onPress={() => nav.go({ name: 'account', from: 'onboarding', step: 'welcome' })} />
+          <TextButton label="Not now — carry on offline" color={t.c.fnt} onPress={onNext} />
+        </View>
+      ) : (
+        <View style={{ gap: 9 }}>
+          <Card style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+            <Badge text="Soon" fg={t.c.amb} bg={t.c.ambT} />
+            <Txt v="secondary" c={t.c.mut} style={{ flex: 1, lineHeight: 19 }}>
+              {ACCOUNTS_SOON_BODY}
+            </Txt>
+          </Card>
+          <PrimaryButton label="Continue" onPress={onNext} style={{ minHeight: 52 }} />
+        </View>
+      )}
     </Screen>
   );
 }

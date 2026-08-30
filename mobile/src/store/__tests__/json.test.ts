@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { jsonPersistence } from '../json';
+import { parseDocument } from '../format';
 import { skill, topic } from '../../engine/__tests__/factory';
 
 jest.mock('@react-native-async-storage/async-storage', () => {
@@ -17,9 +18,13 @@ jest.mock('@react-native-async-storage/async-storage', () => {
       removeItem: jest.fn(async (k: string) => {
         delete store[k];
       }),
+      multiRemove: jest.fn(async (keys: string[]) => {
+        for (const k of keys) delete store[k];
+      }),
       __reset: () => {
         store = {};
       },
+      __keys: () => store,
     },
   };
 });
@@ -101,5 +106,77 @@ describe('the JSON store under concurrent writes', () => {
     const reloaded = await jsonPersistence().load();
     expect(reloaded.skills).toHaveLength(0);
     expect(reloaded.topics).toHaveLength(0);
+  });
+});
+
+
+const raw = (k: string) => (AsyncStorage.getItem as unknown as (k: string) => Promise<string | null>)(k);
+
+describe('opening what an earlier build saved', () => {
+  beforeEach(reset);
+
+  it('reads a version 1 document and hands it over whole', async () => {
+    const s = skill({ name: 'Chemistry' });
+    const t = topic({ skill_id: s.id, title: 'Le Chatelier' });
+    // Exactly how the old build wrote it: the bare document, at the old key.
+    await AsyncStorage.setItem(
+      'interval:v1',
+      JSON.stringify({ skills: [s], topics: [t], reviews: [], log_entries: [], pairs: [], settings: { daily_capacity: 12, theme: 'dark', pre_deadline_days: 21, exam_date: null, onboarded: true, updated_at: '2026-08-01T00:00:00.000Z' } }),
+    );
+
+    const loaded = await jsonPersistence().load();
+
+    expect(loaded.skills[0].name).toBe('Chemistry');
+    expect(loaded.topics[0].title).toBe('Le Chatelier');
+    expect(loaded.settings.daily_capacity).toBe(12);
+    expect(loaded.settings.theme).toBe('dark');
+  });
+
+  it('leaves the old copy alone until the new one is written', async () => {
+    const s = skill();
+    await AsyncStorage.setItem('interval:v1', JSON.stringify({ skills: [s], topics: [], reviews: [], log_entries: [], pairs: [], settings: {} }));
+
+    const p = jsonPersistence();
+    await p.load();
+
+    // Nothing saved yet: a crash here must still leave the original readable.
+    expect(await raw('interval:v1')).not.toBeNull();
+    expect(await raw('interval:v2')).toBeNull();
+  });
+
+  it('upgrades in place on the next save, and only then drops the old key', async () => {
+    const s = skill({ name: 'Chemistry' });
+    await AsyncStorage.setItem('interval:v1', JSON.stringify({ skills: [s], topics: [], reviews: [], log_entries: [], pairs: [], settings: {} }));
+
+    const p = jsonPersistence();
+    await p.load();
+    await p.upsert('topics', [topic({ skill_id: s.id, title: 'Titration' })]);
+
+    expect(await raw('interval:v1')).toBeNull();
+
+    const stored = await raw('interval:v2');
+    expect(stored).not.toBeNull();
+    const { doc: after, from } = parseDocument(stored!);
+    expect(from).toBe(2);
+    // The old work and the new write are both there.
+    expect(after.skills[0].name).toBe('Chemistry');
+    expect(after.topics[0].title).toBe('Titration');
+  });
+
+  it('prefers the current key when both exist', async () => {
+    await AsyncStorage.setItem('interval:v1', JSON.stringify({ skills: [skill({ name: 'stale' })], settings: {} }));
+    await AsyncStorage.setItem('interval:v2', JSON.stringify({ format: 'interval', version: 2, savedAt: '2026-08-27T00:00:00.000Z', doc: { skills: [skill({ name: 'current' })], topics: [], reviews: [], log_entries: [], pairs: [], settings: {} } }));
+
+    expect((await jsonPersistence().load()).skills[0].name).toBe('current');
+  });
+
+  it('sets unreadable text aside instead of writing over it', async () => {
+    await AsyncStorage.setItem('interval:v2', '{ this is not json');
+
+    await expect(jsonPersistence().load()).rejects.toThrow(/could not be read/i);
+
+    // The bytes are still somewhere they can be recovered from.
+    const keys = Object.keys((AsyncStorage as unknown as { __keys: () => string[] }).__keys());
+    expect(keys.some((k) => k.startsWith('interval:unreadable'))).toBe(true);
   });
 });

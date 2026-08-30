@@ -309,8 +309,13 @@ export function PrimaryButton({
   label: string;
   onPress?: () => void;
   disabled?: boolean;
-  /** `done` is the confirmed state a form settles into after it commits. */
-  tone?: 'accent' | 'dark' | 'surface' | 'done';
+  /**
+   * `done` is the confirmed state a form settles into after it commits.
+   * `danger` is for an action that destroys something and cannot be undone —
+   * it reads as a button rather than a link so it can be the primary action on
+   * a confirmation, while never being mistaken for the accent one.
+   */
+  tone?: 'accent' | 'dark' | 'surface' | 'done' | 'danger';
   style?: StyleProp<ViewStyle>;
   icon?: React.ReactNode;
 }) {
@@ -320,6 +325,7 @@ export function PrimaryButton({
     dark: { bg: t.c.tx, fg: t.c.bg, border: 'transparent' },
     surface: { bg: t.c.surf, fg: t.c.tx, border: t.c.line },
     done: { bg: t.c.grnT, fg: t.c.grn, border: 'transparent' },
+    danger: { bg: t.c.redT, fg: t.c.red, border: t.c.red },
   }[tone ?? 'accent'];
 
   return (

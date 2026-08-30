@@ -7,6 +7,7 @@ import { useNav } from '../nav/router';
 import { useStore } from '../store/store';
 import { useAuth } from '../sync/auth';
 import { DEFAULT_REMINDERS, ReminderPrefs, timeLabel } from '../notify/reminders';
+import { ACCOUNTS_ENABLED, ACCOUNTS_SOON, ACCOUNTS_SOON_BODY } from '../sync/availability';
 import { ask, tell } from '../ui/dialog';
 import { applyReminders, ensurePermission, loadPrefs, savePrefs } from '../notify/schedule';
 import { syncSummary } from '../sync/sync';
@@ -14,6 +15,7 @@ import { useTheme } from '../theme/theme';
 import { ON_DEVICE } from '../ui/copy';
 import { radius } from '../theme/tokens';
 import {
+  Badge,
   Card,
   Disclose,
   Dot,
@@ -117,10 +119,14 @@ export function SettingsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Txt v="rowTitle" numberOfLines={1}>
-              {auth.email ?? 'No account yet'}
+              {!ACCOUNTS_ENABLED ? ACCOUNTS_SOON : (auth.email ?? 'No account yet')}
             </Txt>
             <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 2 }}>
-              {auth.signedIn ? 'Signed in · free plan' : 'Everything works offline without one'}
+              {!ACCOUNTS_ENABLED
+                ? 'Everything works without one'
+                : auth.signedIn
+                  ? 'Signed in · free plan'
+                  : 'Everything works offline without one'}
             </Txt>
           </View>
           {/*
@@ -128,7 +134,9 @@ export function SettingsScreen() {
             Signed in there is nothing behind it that is not already on this
             screen — sign out and delete are both below.
           */}
-          {auth.signedIn ? null : (
+          {!ACCOUNTS_ENABLED ? (
+            <Badge text="Soon" fg={t.c.amb} bg={t.c.ambT} />
+          ) : auth.signedIn ? null : (
             <Press onPress={() => nav.go({ name: 'account', from: 'settings', step: 'welcome' })}>
               <Txt v="body" c={t.c.acc} style={{ fontWeight: '500', fontSize: 14 }}>
                 Sign in
@@ -155,12 +163,14 @@ export function SettingsScreen() {
           </Txt>
         </Row>
         <Txt v="secondary" c={auth.sync.error ? t.c.red : t.c.fnt} style={{ marginTop: 8, lineHeight: 19 }}>
-          {auth.sync.error
-            ? // A failure the user can act on beats a status word they cannot.
-              `${auth.sync.error} — everything is still safe ${ON_DEVICE}, and syncing resumes on its own.`
-            : auth.signedIn
-              ? syncSummary(store.doc)
-              : `Ratings are held ${ON_DEVICE}. Export from below if you want a copy.`}
+          {!ACCOUNTS_ENABLED
+            ? ACCOUNTS_SOON_BODY
+            : auth.sync.error
+              ? // A failure the user can act on beats a status word they cannot.
+                `${auth.sync.error} — everything is still safe ${ON_DEVICE}, and syncing resumes on its own.`
+              : auth.signedIn
+                ? syncSummary(store.doc)
+                : `Ratings are held ${ON_DEVICE}. Export from below if you want a copy.`}
         </Txt>
         {auth.sync.error ? (
           <PrimaryButton
@@ -323,6 +333,13 @@ export function SettingsScreen() {
 
       {/* --------------------------------------------------------- danger */}
       <Card padding={0} style={{ marginTop: 16, paddingHorizontal: 18 }}>
+        {/*
+          With accounts off there is no session to end and nothing on a server
+          to delete, so two permanently greyed-out rows would only be noise.
+          Erase, below, is the one that still means something.
+        */}
+        {ACCOUNTS_ENABLED ? (
+          <>
         <Press
           scale={1}
           disabled={!auth.signedIn}
@@ -355,6 +372,8 @@ export function SettingsScreen() {
             Removes the copy on the server within 30 days. Export first if you want to keep it.
           </Txt>
         </Press>
+          </>
+        ) : null}
 
         <Press
           scale={1}
