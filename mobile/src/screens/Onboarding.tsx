@@ -560,8 +560,8 @@ function RegisterGate({ onNext, onBack }: { onNext: () => void; onBack: () => vo
       </Txt>
       <Txt c={t.c.mut} style={{ marginTop: 10, lineHeight: 23, maxWidth: 320 }}>
         {ACCOUNTS_ENABLED
-          ? `Part two sets up your skills. An account keeps the schedule when the ${DEVICE} doesn't.`
-          : 'Part two sets up your skills.'}
+          ? `Next you set up your skills. An account keeps the schedule when the ${DEVICE} doesn't.`
+          : 'Next you set up your skills.'}
       </Txt>
 
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 }}>
