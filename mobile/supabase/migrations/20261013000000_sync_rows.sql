@@ -205,6 +205,11 @@ grant execute on function public.sync_push(jsonb, bigint) to authenticated;
 revoke all on function public.request_account_deletion() from public, anon;
 grant execute on function public.request_account_deletion() to authenticated;
 
+-- A trigger function, which Postgres refuses to run except as a trigger — but
+-- PostgREST still lists it as an RPC, and Supabase's security advisor flags
+-- it. Triggers fire without EXECUTE, so sign-up is unaffected.
+revoke all on function public.handle_new_user() from public, anon, authenticated;
+
 -- ------------------------------------------- carry over the first schema --
 -- Each row becomes a document holding exactly the columns it had, minus
 -- user_id. Timestamps are cut to milliseconds, which is all a device writes,

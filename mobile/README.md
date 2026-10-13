@@ -107,6 +107,10 @@ Two choices to know about:
 
 ## Turning on sync
 
+The project this app syncs with is set in `mobile/.env` (committed — both
+values ship in every build anyway). Put overrides in `.env.local`, and after
+changing either, bundle with `--clear`: Metro caches the inlined values.
+
 Sync is off until a project is configured, and the app says so rather than
 failing:
 

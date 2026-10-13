@@ -242,6 +242,18 @@ end;
 $$;
 
 reset role;
+select pg_temp.check(
+  not has_function_privilege('anon', 'public.handle_new_user()', 'execute')
+    and not has_function_privilege('authenticated', 'public.handle_new_user()', 'execute'),
+  'the profile trigger function is not exposed as an RPC');
+
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ee', 'trigger@example.com');
+select pg_temp.check(
+  exists (select 1 from public.profiles where id = '00000000-0000-0000-0000-0000000000ee'),
+  'and the trigger still makes a profile on sign-up');
+set role anon;
+
+reset role;
 
 -- ------------------------------------------------ deleting the account --
 
