@@ -8,7 +8,7 @@
  * separately is the point — "it doesn't work" is not a diagnosis, and the two
  * have different fixes.
  *
- *   node scripts/check-supabase.mjs                 # reads .env.local
+ *   node scripts/check-supabase.mjs                 # reads .env.local, then .env
  *   node scripts/check-supabase.mjs <url> <anonKey>
  *
  * Only the anon key is ever used. It ships in the app already; row level
@@ -25,20 +25,25 @@ const TABLES = ['profiles', 'sync_rows', 'deletion_requests'];
  */
 const FUNCTIONS = { sync_push: { changes: [] }, request_account_deletion: {} };
 
+/** .env.local wins over .env, as it does for Expo itself. */
 function fromEnvFile() {
-  try {
-    const text = readFileSync(new URL('../.env.local', import.meta.url), 'utf8');
-    const get = (k) => text.match(new RegExp(`^${k}=(.+)$`, 'm'))?.[1]?.trim();
-    return [get('EXPO_PUBLIC_SUPABASE_URL'), get('EXPO_PUBLIC_SUPABASE_ANON_KEY')];
-  } catch {
-    return [undefined, undefined];
+  for (const name of ['../.env.local', '../.env']) {
+    try {
+      const text = readFileSync(new URL(name, import.meta.url), 'utf8');
+      const get = (k) => text.match(new RegExp(`^${k}=(.+)$`, 'm'))?.[1]?.trim();
+      const found = [get('EXPO_PUBLIC_SUPABASE_URL'), get('EXPO_PUBLIC_SUPABASE_ANON_KEY')];
+      if (found[0] && found[1]) return found;
+    } catch {
+      // Not there; try the next.
+    }
   }
+  return [undefined, undefined];
 }
 
 const [url, key] = process.argv.length > 3 ? process.argv.slice(2, 4) : fromEnvFile();
 
 if (!url || !key) {
-  console.error('Need a project URL and anon key — pass them as arguments or set them in .env.local.');
+  console.error('Need a project URL and anon key — pass them as arguments or set them in .env.local or .env.');
   process.exit(2);
 }
 
