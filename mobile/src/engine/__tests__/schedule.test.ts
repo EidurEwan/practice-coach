@@ -108,9 +108,15 @@ describe('curves', () => {
 describe('ratings', () => {
   const t = topic({ interval_days: 5, repetition: 2 });
 
-  test('OK advances one rung, easy jumps one further', () => {
+  test('OK advances one rung; easy takes the same rung, 1.3× longer', () => {
     expect(applyRating(t, 'reasoning', 'ok', DAY).interval_days).toBe(10);
-    expect(applyRating(t, 'reasoning', 'easy', DAY).interval_days).toBe(22);
+    expect(applyRating(t, 'reasoning', 'easy', DAY).interval_days).toBe(13);
+  });
+
+  test('easy on a mature topic does not leap months ahead', () => {
+    const mature = topic({ interval_days: 22, repetition: 4 });
+    expect(applyRating(mature, 'reasoning', 'ok', DAY).interval_days).toBe(48);
+    expect(applyRating(mature, 'reasoning', 'easy', DAY).interval_days).toBe(62);
   });
 
   test('hard shrinks without losing the rung; failed resets to the first', () => {
@@ -148,7 +154,7 @@ describe('ratings', () => {
     for (const { rating, days } of preview) {
       expect(applyRating(t, 'reasoning', rating, DAY).interval_days).toBe(days);
     }
-    expect(preview.map((p) => p.days)).toEqual([1, 3, 10, 22]);
+    expect(preview.map((p) => p.days)).toEqual([1, 3, 10, 13]);
   });
 });
 
@@ -209,6 +215,49 @@ describe('weak points', () => {
 
     const penalised = topic({ interval_days: 5, repetition: 2, penalty: 0.7 });
     expect(applyRating(penalised, 'reasoning', 'ok', DAY).interval_days).toBe(Math.round(10 * 0.7));
+  });
+});
+
+describe('a per-item card after weak points', () => {
+  // Two weak points on a language deck: the shape a struggling learner
+  // actually produces. The penalty used to compound on every rating, so this
+  // card came back daily for ever, however many OKs it was given.
+  const struggling = () => {
+    let t = topic({ interval_days: 10, repetition: 3, ease: 2.5, penalty: 1 });
+    for (const r of ['hard', 'hard', 'failed', 'hard', 'hard', 'failed'] as Rating[]) {
+      t = { ...t, ...applyRating(t, 'language', r, DAY) };
+    }
+    return t;
+  };
+
+  test('is penalised, as the weak-point rule says', () => {
+    expect(struggling().penalty).toBeCloseTo(0.49);
+  });
+
+  test('climbs again on OKs rather than staying at one day', () => {
+    let t = struggling();
+    const gaps: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      t = { ...t, ...applyRating(t, 'language', 'ok', DAY) };
+      gaps.push(t.interval_days);
+    }
+    for (let i = 1; i < gaps.length; i++) expect(gaps[i]).toBeGreaterThan(gaps[i - 1]);
+    expect(gaps[gaps.length - 1]).toBeGreaterThanOrEqual(7);
+  });
+
+  test('the penalty is applied once, not again on every rating', () => {
+    const t = topic({ interval_days: 7, repetition: 4, ease: 2, penalty: 0.7 });
+    // Unpenalised the gap was 10; OK takes it to 20, and the penalty makes 14.
+    expect(applyRating(t, 'language', 'ok', DAY).interval_days).toBe(14);
+  });
+
+  test('the forecast agrees with what rating OK would do', () => {
+    let t = struggling();
+    const chain = projectedChain(t, 'language', 4);
+    for (const expected of chain) {
+      t = { ...t, ...applyRating(t, 'language', 'ok', t.due_on) };
+      expect(t.interval_days).toBe(expected);
+    }
   });
 });
 

@@ -9,6 +9,7 @@ import { jsonPersistence } from './json';
 import { parseDocument, serialiseForExport } from './format';
 import type { LocalPatch } from '../sync/protocol';
 import { CollectionName, Collections, Persistence } from './persistence';
+import { keptSubSkill, nextHue } from './rules';
 import { nowIso, uid } from './uid';
 
 export type UndoEntry = {
@@ -255,7 +256,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         name: name.trim(),
         genre,
         physical_kind,
-        hue_index: live.current.skills.length,
+        hue_index: nextHue(live.current.skills),
         archived_at: null,
         created_at: at,
         updated_at: at,
@@ -276,7 +277,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       let topic: Topic;
       if (existing) {
         const { interval_days, due_on } = applyLog(existing, skill.genre, studiedOn, feltShaky);
-        topic = { ...existing, interval_days, due_on, sub_skill: subSkill ?? existing.sub_skill, updated_at: at };
+        topic = { ...existing, interval_days, due_on, sub_skill: keptSubSkill(subSkill, existing.sub_skill), updated_at: at };
       } else {
         topic = {
           id: uid(),

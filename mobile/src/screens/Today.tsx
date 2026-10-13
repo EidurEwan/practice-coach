@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { bandFor, gapLabel, pipsFor } from '../engine/bands';
-import { addDays, backIn, daysBetween, formatLong, inWords } from '../engine/dates';
-import { FLAG_LABEL, PlanItem, badgeFor } from '../engine/plan';
+import { addDays, backIn, dayOf, daysBetween, formatLong, inWords } from '../engine/dates';
+import { activeTopics, FLAG_LABEL, PlanItem, badgeFor } from '../engine/plan';
 import { previewRatings } from '../engine/schedule';
 import { Rating } from '../engine/types';
 import { useNav } from '../nav/router';
@@ -32,15 +32,17 @@ export function TodayScreen() {
   const ratedToday = useMemo(
     () =>
       doc.reviews
-        .filter((r) => r.rated_at.slice(0, 10) === day)
+        // The rating's own local day. Slicing the stored ISO string reads the
+        // UTC date, which puts an evening rating in the Americas on tomorrow.
+        .filter((r) => dayOf(r.rated_at) === day)
         .map((r) => ({ review: r, topic: doc.topics.find((x) => x.id === r.topic_id) }))
         .filter((r) => r.topic),
     [day, doc.reviews, doc.topics],
   );
 
   const nextUp = useMemo(() => {
-    const upcoming = doc.topics
-      .filter((x) => !x.archived_at && x.due_on > day)
+    const upcoming = activeTopics(doc)
+      .filter((x) => x.due_on > day)
       .sort((a, b) => (a.due_on < b.due_on ? -1 : 1));
     if (!upcoming.length) return null;
     const on = upcoming[0].due_on;

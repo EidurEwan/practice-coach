@@ -11,6 +11,9 @@ export const EASE_DEFAULT = 2.5;
 export const PENALTY_STEP = 0.7;
 export const PENALTY_FLOOR = 0.4;
 
+/** What Easy adds over OK, on every genre. */
+export const EASY_BONUS = 1.3;
+
 /** Three in a row is the trigger for both a plateau and a weak point. */
 export const STREAK_TRIGGER = 3;
 
@@ -74,6 +77,12 @@ export function applyRating(topic: Topic, genre: Genre, rating: Rating, on: Day)
   let raw: number;
 
   if (isPerItem(genre)) {
+    // The interval as it would be without the weak-point penalty. The stored
+    // interval already has the penalty in it, so stepping from that and then
+    // applying the penalty again compounded it on every rating — a card with
+    // two weak points stalled at one day and stayed there, however many OKs
+    // it got. The penalty is applied once, below, to whatever this produces.
+    const unpenalised = topic.interval_days / topic.penalty;
     switch (rating) {
       case 'failed':
         repetition = 0;
@@ -83,16 +92,16 @@ export function applyRating(topic: Topic, genre: Genre, rating: Rating, on: Day)
       case 'hard':
         repetition = repetition + 1;
         ease = clamp(ease - 0.15, EASE_MIN, EASE_MAX);
-        raw = topic.interval_days * 0.6;
+        raw = unpenalised * 0.6;
         break;
       case 'ok':
         repetition = repetition + 1;
-        raw = perItemStep(topic.interval_days, repetition, ease);
+        raw = perItemStep(unpenalised, repetition, ease);
         break;
       case 'easy':
         repetition = repetition + 1;
         ease = clamp(ease + 0.15, EASE_MIN, EASE_MAX);
-        raw = perItemStep(topic.interval_days, repetition, ease) * 1.3;
+        raw = perItemStep(unpenalised, repetition, ease) * EASY_BONUS;
         break;
     }
   } else {
@@ -110,8 +119,11 @@ export function applyRating(topic: Topic, genre: Genre, rating: Rating, on: Day)
         raw = curveAt(genre, repetition);
         break;
       case 'easy':
-        repetition = repetition + 2;
-        raw = curveAt(genre, repetition);
+        // The next rung, lengthened — not two rungs at once. Skipping a rung
+        // multiplies the gap by the curve's growth twice, which on a mature
+        // topic is one tap moving it from seven weeks to eight months.
+        repetition = repetition + 1;
+        raw = curveAt(genre, repetition) * EASY_BONUS;
         break;
     }
   }
@@ -137,7 +149,16 @@ export function applyRating(topic: Topic, genre: Genre, rating: Rating, on: Day)
     streak = 0;
   }
 
-  const interval_days = Math.max(1, Math.round(raw * penalty));
+  let interval_days = Math.max(1, Math.round(raw * penalty));
+  // A success never brings a topic back sooner than last time. Rounding a
+  // short, penalised interval can otherwise land on the same day count — or
+  // fewer — and an OK that changes nothing reads as the app not listening.
+  // A deck's first two reviews are the exception — they are fixed steps —
+  // unless a penalty has squeezed them onto the same day.
+  const fixedStep = isPerItem(genre) && repetition <= 2 && penalty === 1;
+  if ((rating === 'ok' || rating === 'easy') && !fixedStep && interval_days <= topic.interval_days) {
+    interval_days = topic.interval_days + 1;
+  }
   const state: TopicState = topic.state === 'paused' ? 'paused' : interval_days >= 10 ? 'stable' : 'learning';
 
   return {
@@ -189,31 +210,32 @@ export function applyLog(
   return { interval_days: interval, due_on: addDays(studiedOn, interval) };
 }
 
-/** The full projected chain from a topic's current position, on unbroken OKs. */
-export function projectedChain(topic: Topic, genre: Genre, count: number): number[] {
-  const out: number[] = [];
-  let interval = topic.interval_days;
-  let repetition = topic.repetition;
-  let ease = topic.ease;
+/**
+ * Where a topic goes on an unbroken run of OKs, each review on the day it is
+ * due. Runs the real rating, so a projection can never disagree with what
+ * rating OK would actually do — the two used to be separate arithmetic, and
+ * the projection inherited every bug the rating had and some of its own.
+ */
+function okRun(topic: Topic, genre: Genre, count: number): Topic[] {
+  const out: Topic[] = [];
+  let cur = topic;
   for (let i = 0; i < count; i++) {
-    repetition += 1;
-    const raw = isPerItem(genre) ? perItemStep(interval, repetition, ease) : curveAt(genre, repetition);
-    interval = Math.max(1, Math.round(raw * topic.penalty));
-    out.push(interval);
+    const next = applyRating(cur, genre, 'ok', cur.due_on);
+    cur = { ...cur, ...next, state: next.state };
+    out.push(cur);
   }
   return out;
 }
 
+/** The full projected chain from a topic's current position, on unbroken OKs. */
+export function projectedChain(topic: Topic, genre: Genre, count: number): number[] {
+  return okRun(topic, genre, count).map((t) => t.interval_days);
+}
+
 /** The dates a topic lands on next, if every rating is OK. */
 export function projectedDates(topic: Topic, genre: Genre, count: number): { day: Day; index: number }[] {
-  const chain = projectedChain(topic, genre, count);
-  const out: { day: Day; index: number }[] = [];
-  let day = topic.due_on;
-  out.push({ day, index: 0 });
-  for (let i = 0; i < chain.length - 1; i++) {
-    day = addDays(day, chain[i]);
-    out.push({ day, index: i + 1 });
-  }
+  const out: { day: Day; index: number }[] = [{ day: topic.due_on, index: 0 }];
+  okRun(topic, genre, count - 1).forEach((t, i) => out.push({ day: t.due_on, index: i + 1 }));
   return out;
 }
 

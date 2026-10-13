@@ -71,6 +71,17 @@ export function formatAgendaDate(day: Day, from: Day): string {
   return formatShort(day);
 }
 
+/** The Monday on or before `day` — weeks start on Monday throughout. */
+export function weekStart(day: Day): Day {
+  const dow = parseDay(day).getDay();
+  return addDays(day, -((dow + 6) % 7));
+}
+
+/** The local calendar day of a stored timestamp. Never slice the ISO string: it is UTC. */
+export function dayOf(iso: string): Day {
+  return toDay(new Date(iso));
+}
+
 export function monthLabel(day: Day): string {
   const d = parseDay(day);
   return `${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ` ${d.getFullYear()}` : ''}`;
