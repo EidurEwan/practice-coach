@@ -1,8 +1,8 @@
 name: CI
 
 # The tests only protect anything if something runs them. They cover the
-# scheduler, the merge, navigation, the band colours and the persistence
-# repairs — all the parts where a regression is silent rather than loud.
+# scheduler, sync, navigation, the band colours and the persistence repairs —
+# all the parts where a regression is silent rather than loud.
 on:
   push:
     branches: [main]
@@ -40,3 +40,29 @@ jobs:
         env:
           EXPO_PUBLIC_SUPABASE_URL: ''
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ''
+
+  # The server half of sync. The app's tests run against an in-memory copy of
+  # its rules; this runs the real migrations on a real Postgres and checks the
+  # rules there, so the copy and the original cannot drift apart unnoticed.
+  schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Migrations apply, and the sync rules hold
+        run: mobile/supabase/verify/verify.sh
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres

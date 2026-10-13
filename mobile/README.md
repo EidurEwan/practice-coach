@@ -6,7 +6,7 @@ offline-first, with Supabase as a backup and merge target rather than a gate.
 ```bash
 npm install
 npm start          # then i / a / w
-npm test           # 116 tests — engine, merge, nav, persistence, reminders
+npm test           # 184 tests — engine, sync, nav, persistence, reminders
 npm run typecheck
 ```
 
@@ -24,11 +24,11 @@ src/engine/     the scheduler — pure TypeScript, no React, no I/O
   recall.ts       chart geometry — the sawtooth and the onboarding curves
   plan.ts         the day: ranking, capacity, backlog, interleaving, agenda
 src/store/      local-first persistence (SQLite on device, JSON elsewhere)
-src/sync/       Supabase client, auth, and the timestamp merge
+src/sync/       sync rules, engine and transport; Supabase client and auth
 src/theme/      the handoff's tokens, and light/dark/system
 src/ui/         primitives, icons, charts, and the app shell
 src/screens/    Today, Log, Upcoming, Skills, Settings, Onboarding, Account
-supabase/       schema.sql — tables, indexes, RLS, account deletion
+supabase/       migrations (schema, RLS, sync_push, account deletion) and verify/
 ```
 
 The engine has no React in it, which is what lets the rating buttons state
@@ -47,9 +47,63 @@ persistence on every mutation. The phone is the source of truth:
   isolation, neither of which a preview should require.
 
 Every row carries `updated_at`, because the sync rule shown in the UI is
-*ratings merge by timestamp, latest wins*, applied per row rather than per
-document (`src/sync/merge.ts`). Two devices that were both offline keep
-everything either of them did.
+*merges by timestamp, latest wins*, applied per row rather than per document.
+Two devices that were both offline keep everything either of them did.
+
+## How sync works
+
+Sync was rebuilt from scratch; the first version lost work in ordinary use
+(deletions came back, edits made during a sync were overwritten, and a new
+phone received at most 1000 rows). What replaced it:
+
+- **The server is a feed.** Every record is a row in `sync_rows` — a JSON
+  document keyed by account, kind and id, with a tombstone flag and a feed
+  position, `seq`. A device reads everything after the last position it saw,
+  a page at a time, so a sync costs what changed rather than everything.
+- **Writes go through one function.** `sync_push` applies *latest timestamp
+  wins* on the server, holding a per-account lock so feed positions are
+  handed out in commit order. It sends back its own copy of anything it
+  refuses, and tells the device whether it can skip reading back its own
+  writes.
+- **Deletions are recorded, and final.** A deleted row becomes a tombstone,
+  and an edit to it from a device that had not heard yet is refused, so
+  deleting a skill cannot come back one topic at a time.
+- **The device knows what it last agreed with the server.** Sync keeps, per
+  account, each row's timestamp as of the last sync (the *base*), stored
+  beside the data itself (`readMeta`/`writeMeta`). Device against base tells
+  an edit made here from one made elsewhere, and a row in the base but gone
+  from the device is a deletion to upload. If the data is erased or lost,
+  the base goes with it, and the next sync downloads instead of deleting.
+- **Merges land on the live document.** Each download is applied to what is
+  on screen at that moment, never to a copy taken before the request, so a
+  rating made mid-sync survives.
+- **Timestamps never go backwards.** Local stamps stay ahead of every
+  timestamp the device has seen (`nowIso`/`observeTime`), so a phone whose
+  clock runs slow does not lose its own later edit.
+- **Orphans are swept.** A topic added offline to a skill deleted elsewhere
+  is removed after the download, and its tombstone goes up — the old
+  `on delete cascade`, done where the data lives.
+
+| File | Holds |
+|---|---|
+| `src/sync/protocol.ts` | the rules — pure, no I/O |
+| `src/sync/engine.ts` | one sync (`syncOnce`), and when to run it (`SyncRunner`: one at a time, coalesced, backoff on failure) |
+| `src/sync/remote.ts` | the two calls to Supabase |
+| `src/sync/auth.tsx` | sessions, and starting a runner per signed-in account |
+
+The tests drive two simulated phones against an in-memory server
+(`src/sync/__tests__/fakeServer.ts`) that follows the same rules as
+`sync_push`. `supabase/verify/verify.sh` checks those rules against the real
+SQL on a real Postgres; CI runs both.
+
+Two choices to know about:
+
+- **Signing in on a phone adopts the account's settings.** The first time a
+  device syncs with an account, the account's settings win over the device's,
+  which are usually onboarding defaults stamped a minute earlier.
+- **Import replaces the synced copy as well.** Imported rows are stamped as
+  new edits, so they win over what the account holds — except rows the
+  account has deleted, which stay deleted.
 
 ## Turning on sync
 
@@ -63,8 +117,9 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=...
 
 The schema lives in `supabase/migrations/`. Every table is scoped by `user_id`
 behind row level security, and each one carries the `GRANT`s that RLS assumes —
-policies alone are not enough, and without the grants every signed-in write
-fails with *permission denied*. `request_account_deletion()` backs the "removes
+policies alone are not enough, and without the grants every signed-in request
+fails with *permission denied*. `sync_rows` is readable by its owner and
+writable only through `sync_push`. `request_account_deletion()` backs the "removes
 the copy on the server within 30 days" line in Settings.
 
 ### Running the whole stack locally
@@ -99,10 +154,10 @@ different fixes. `scripts/check-supabase.mjs` tells them apart:
 node scripts/check-supabase.mjs https://<ref>.supabase.co <anon-key>
 ```
 
-1. **The schema has to exist.** Paste
-   `supabase/migrations/20260812000000_init.sql` into the SQL editor, or
-   `supabase link` then `supabase db push`. Every table 404s with `PGRST205`
-   until this is done. A table that answers **401** is correct — it exists and
+1. **The schema has to exist.** `supabase link` then `supabase db push`, or
+   paste each file in `supabase/migrations/` into the SQL editor, oldest
+   first. The second carries any rows the first schema held across before
+   dropping its tables. Everything 404s with `PGRST205` until this is done. A table that answers **401** is correct — it exists and
    is closed to the anon role, which is what row level security is for.
 2. **The project has to be able to send mail.** Authentication → Emails → SMTP
    Settings, with any provider (Resend, Brevo, Postmark, SendGrid, or a Gmail
@@ -149,7 +204,7 @@ Other calls made while building:
   leaves it up, which puts a second logo above the gate's centred one.
 - **Two extra columns.** `topics.format_rung` (which rung of the practice-format
   ladder a plateau has pushed it to) and `skills.hue_index` (so a colour cannot
-  move when a skill is archived). Both are in `supabase/schema.sql`.
+  move when a skill is archived). Both travel in the synced record.
 - **Streak is signed.** `+n` counts consecutive OKs toward a plateau, `−n`
   counts hard/failed toward a weak point, and the opposite rating clears it —
   one column instead of two.
@@ -218,7 +273,7 @@ Clearing the last thing due gets a different feel from the rating before it.
   project and native credentials to exercise.
 - Import takes pasted JSON rather than a file picker; export goes through the
   system share sheet.
-- No component tests. The engine and the merge are covered; the screens were
+- No component tests. The engine and sync are covered; the screens were
   verified by walking the flows in a browser at 402×874 and on an Android
   emulator (API 35), including a cold restart to prove SQLite persistence.
 - iOS is unrun — it needs macOS. The bundle builds, but nothing on that

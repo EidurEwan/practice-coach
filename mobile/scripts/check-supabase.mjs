@@ -17,7 +17,13 @@
 
 import { readFileSync } from 'node:fs';
 
-const TABLES = ['profiles', 'skills', 'topics', 'reviews', 'log_entries', 'pairs', 'settings', 'deletion_requests'];
+const TABLES = ['profiles', 'sync_rows', 'deletion_requests'];
+/**
+ * A 404 means the migration is missing. PostgREST finds a function by its
+ * argument names, so each probe sends the real ones — with the wrong names an
+ * existing function 404s too.
+ */
+const FUNCTIONS = { sync_push: { changes: [] }, request_account_deletion: {} };
 
 function fromEnvFile() {
   try {
@@ -50,12 +56,25 @@ for (const table of TABLES) {
   if (res.status === 404) missing.push(table);
 }
 
+// A function anon may not call answers 401, and one it may call but that
+// needs a user fails some other way; only a missing one answers 404.
+for (const [fn, args] of Object.entries(FUNCTIONS)) {
+  const res = await fetch(`${base}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: { apikey: key, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+  if (res.status === 404) missing.push(`${fn}()`);
+}
+
+const wanted = TABLES.length + Object.keys(FUNCTIONS).length;
 if (missing.length) {
   ok = false;
-  console.log(`  schema     MISSING — ${missing.length}/${TABLES.length} tables absent (${missing.join(', ')})`);
-  console.log('             Paste supabase/migrations/20260812000000_init.sql into the SQL editor.');
+  console.log(`  schema     MISSING — ${missing.length}/${wanted} absent (${missing.join(', ')})`);
+  console.log('             Apply every file in supabase/migrations, oldest first — `supabase db push`,');
+  console.log('             or paste each into the SQL editor in name order.');
 } else {
-  console.log(`  schema     ok — all ${TABLES.length} tables present and closed to anon`);
+  console.log(`  schema     ok — all ${TABLES.length} tables and ${Object.keys(FUNCTIONS).length} functions present and closed to anon`);
 }
 
 // ------------------------------------------------------------------ mail --

@@ -9,6 +9,8 @@ const KEY = 'interval:v2';
 const LEGACY_KEY = 'interval:v1';
 /** Text that would not parse is kept here rather than thrown away. */
 const QUARANTINE_KEY = 'interval:unreadable';
+/** Meta values, as one object, so `reset` can take them all in one remove. */
+const META_KEY = 'interval:meta';
 
 /**
  * The whole-document store: the browser's, and the fallback anywhere SQLite
@@ -94,6 +96,16 @@ export function jsonPersistence(): Persistence {
     }
   };
 
+  /** Unreadable meta is only bookkeeping: starting it over costs a download. */
+  const readMetaMap = async (): Promise<Record<string, string>> => {
+    try {
+      const parsed: unknown = JSON.parse((await AsyncStorage.getItem(META_KEY)) ?? '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  };
+
   const modify = (change: (doc: Doc) => Doc) =>
     serial(async () => {
       await write(change(await read()));
@@ -131,7 +143,18 @@ export function jsonPersistence(): Persistence {
       return serial(async () => {
         cache = null;
         legacyToClear = false;
-        await AsyncStorage.multiRemove([KEY, LEGACY_KEY]);
+        await AsyncStorage.multiRemove([KEY, LEGACY_KEY, META_KEY]);
+      });
+    },
+
+    readMeta(key: string) {
+      return serial(async () => (await readMetaMap())[key] ?? null);
+    },
+
+    writeMeta(key: string, value: string) {
+      return serial(async () => {
+        const all = await readMetaMap();
+        await AsyncStorage.setItem(META_KEY, JSON.stringify({ ...all, [key]: value }));
       });
     },
   };

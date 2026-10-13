@@ -280,8 +280,29 @@ export async function sqlitePersistence(): Promise<Persistence> {
       return serial(async () => {
         await db.withExclusiveTransactionAsync(async (tx) => {
           for (const table of COLLECTIONS) await tx.runAsync(`DELETE FROM ${table}`);
+          // Takes the meta values with it, which is the point of keeping them here.
           await tx.runAsync('DELETE FROM app_settings');
         });
+      });
+    },
+
+    // Queued behind writes like everything else: a read that overtook a
+    // pending reset would hand sync the base of data that is being erased.
+    readMeta(key: string) {
+      return serial(async () => {
+        const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', [
+          `meta:${key}`,
+        ]);
+        return row?.value ?? null;
+      });
+    },
+
+    writeMeta(key: string, value: string) {
+      return serial(async () => {
+        await db.runAsync(
+          'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+          [`meta:${key}`, value],
+        );
       });
     },
   };

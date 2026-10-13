@@ -1,18 +1,17 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Google from 'expo-auth-session/providers/google';
 import Constants from 'expo-constants';
 import type { Session } from '@supabase/supabase-js';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { Doc } from '../engine/types';
 import { useStore } from '../store/store';
+import { metaStore, SyncRunner, syncOnce } from './engine';
+import { supabaseRemote } from './remote';
 import { isConfigured, NOT_CONFIGURED, supabase } from './supabase';
-import { reassignIds } from './reassign';
-import { isOwnershipError, syncError, syncNow, SyncState } from './sync';
+import { syncError, SyncState } from './sync';
 
-/** Which account this phone last uploaded to. Device metadata, not user data. */
-const SYNCED_USER = 'interval:synced-user';
+/** How long after an edit to sync, so rating four things in a row is one sync. */
+const AFTER_EDIT_MS = 4000;
 
 export type Auth = {
   configured: boolean;
@@ -90,7 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error: null,
   });
   const [appleAvailable, setAppleAvailable] = useState(false);
-  const busy = useRef(false);
   const promptGoogle = useRef<(() => Promise<unknown>) | null>(null);
 
   const registerGoogle = useCallback((prompt: (() => Promise<unknown>) | null) => {
@@ -112,68 +110,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  const run = useCallback(async () => {
-    const userId = session?.user?.id;
-    if (!supabase || !userId || busy.current || !store.ready) return;
-    busy.current = true;
-    setSync((s) => ({ ...s, status: 'syncing', error: null }));
-    try {
-      // Signing into a different account on this phone: the local rows were
-      // uploaded under the previous account and cannot be written to this one,
-      // so they become this account's own copies before the first push.
-      const previous = await AsyncStorage.getItem(SYNCED_USER);
-      let local = store.doc;
-      if (previous && previous !== userId) {
-        local = reassignIds(local);
-        await store.replaceDoc(local, { fromSync: true });
-      }
-      await AsyncStorage.setItem(SYNCED_USER, userId);
+  // The store object changes on every render; sync needs the latest one
+  // without restarting each time it does.
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  const runner = useRef<SyncRunner | null>(null);
+  const userId = session?.user?.id ?? null;
 
-      let merged: Doc;
-      try {
-        merged = await syncNow(local, userId);
-      } catch (e) {
-        // The server says these rows are somebody else's — which happens when
-        // this phone synced under another account before there was anything
-        // recording that. Take the same repair and try once more, so a phone
-        // in that state is not stuck failing forever.
-        if (!isOwnershipError(e)) throw e;
-        local = reassignIds(local);
-        await store.replaceDoc(local, { fromSync: true });
-        merged = await syncNow(local, userId);
-      }
-      await store.replaceDoc(merged, { fromSync: true });
-      setSync({ status: 'idle', at: new Date().toISOString(), error: null });
-    } catch (e) {
-      const error = syncError(e, 'sync').message.replace(/^Could not sync: /, '');
-      console.warn('sync failed:', error);
-      setSync((s) => ({ ...s, status: 'error', error }));
-    } finally {
-      busy.current = false;
-    }
-  }, [session, store]);
-
-  // Sync when the session appears and whenever the app comes back to the front.
+  // One runner per signed-in account. Signing out, or into another account,
+  // stops it; the next one keeps its own record of what the server holds, so
+  // the same phone can sync with two accounts without either refusing it.
   useEffect(() => {
-    if (session) void run();
+    if (!supabase || !userId || !store.ready || store.loadFailed) return;
+
+    const remote = supabaseRemote(supabase, userId);
+    const meta = metaStore(
+      {
+        readMeta: (k) => storeRef.current.readMeta(k),
+        writeMeta: (k, v) => storeRef.current.writeMeta(k, v),
+      },
+      userId,
+    );
+    const local = {
+      read: () => storeRef.current.current(),
+      apply: (change: Parameters<typeof store.applyRemote>[0]) => storeRef.current.applyRemote(change),
+      generation: () => storeRef.current.generation(),
+    };
+
+    const r = new SyncRunner(() => syncOnce({ local, meta, remote }), {
+      onStart: () => setSync((s) => ({ ...s, status: 'syncing', error: null })),
+      onSuccess: () => setSync({ status: 'idle', at: new Date().toISOString(), error: null }),
+      onError: (e) => {
+        const error = syncError(e, 'sync').message.replace(/^Could not sync: /, '');
+        console.warn('sync failed:', error);
+        setSync((s) => ({ ...s, status: 'error', error }));
+      },
+    });
+    runner.current = r;
+    r.request(0);
+
+    return () => {
+      r.stop();
+      runner.current = null;
+      setSync({ status: isConfigured ? 'idle' : 'off', at: null, error: null });
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id, store.ready]);
+  }, [userId, store.ready, store.loadFailed]);
 
-  // And shortly after the schedule changes, so a rating reaches the other
-  // device without waiting for the app to be backgrounded. Debounced, because
-  // rating four things in a row is one change as far as the server cares.
+  // Shortly after the schedule changes, so a rating reaches the other device
+  // without waiting for the app to be backgrounded.
   useEffect(() => {
-    if (!session || !store.revision) return;
-    const id = setTimeout(() => void run(), 4000);
-    return () => clearTimeout(id);
-  }, [run, session, store.revision]);
+    if (store.revision) runner.current?.request(AFTER_EDIT_MS);
+  }, [store.revision]);
 
+  // And whenever the app comes back to the front.
   useEffect(() => {
     const s = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && session) void run();
+      if (state === 'active') runner.current?.request(0);
     });
     return () => s.remove();
-  }, [run, session]);
+  }, []);
 
   const value = useMemo<Auth>(
     () => ({
@@ -244,9 +240,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
       },
 
-      syncNow: run,
+      async syncNow() {
+        runner.current?.request(0);
+      },
     }),
-    [appleAvailable, run, session, sync],
+    [appleAvailable, session, sync],
   );
 
   return (

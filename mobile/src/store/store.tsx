@@ -7,6 +7,7 @@ import { applyLog, applyRating, newTopicDefaults } from '../engine/schedule';
 import { Doc, emptyDoc, LogEntry, Pair, Rating, Review, Settings, Skill, Topic } from '../engine/types';
 import { jsonPersistence } from './json';
 import { parseDocument, serialiseForExport } from './format';
+import type { LocalPatch } from '../sync/protocol';
 import { CollectionName, Collections, Persistence } from './persistence';
 import { nowIso, uid } from './uid';
 
@@ -33,6 +34,12 @@ export type Store = {
   ready: boolean;
   /** Set when the local store could not be read. The app runs, but empty. */
   loadError: string | null;
+  /**
+   * The saved document could not be read at all, as opposed to being read
+   * from the fallback store. Sync stays off: an empty screen is not a
+   * statement that everything was deleted, and must not be uploaded as one.
+   */
+  loadFailed: boolean;
   /** The collection whose last save failed, if one did. Work is unsaved. */
   saveError: string | null;
   doc: Doc;
@@ -64,8 +71,22 @@ export type Store = {
   exportJson: () => string;
   importJson: (raw: string) => Promise<void>;
   eraseEverything: () => Promise<void>;
-  /** Replaces everything. `fromSync` writes land without marking work to push. */
-  replaceDoc: (doc: Doc, opts?: { fromSync?: boolean }) => Promise<void>;
+  /** Replaces everything. */
+  replaceDoc: (doc: Doc) => Promise<void>;
+
+  /** The document as it is this instant, not as of the last render. */
+  current: () => Doc;
+  /**
+   * Applies what sync brought back. `change` runs against the document as it
+   * is when called — never an older copy — so nothing done on screen while a
+   * sync was in flight is overwritten. Does not count as a local edit.
+   * Resolves once saved, and rejects if the save failed.
+   */
+  applyRemote: (change: (live: Doc) => { doc: Doc; patch: LocalPatch } | null) => Promise<void>;
+  readMeta: (key: string) => Promise<string | null>;
+  writeMeta: (key: string, value: string) => Promise<void>;
+  /** Bumps when everything here is erased, so a sync in flight knows to stop. */
+  generation: () => number;
   /**
    * Bumps on every local edit and never on a write that came from sync, so a
    * sync can be scheduled after changes without the write retriggering it.
@@ -105,8 +126,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [undoable, setUndoable] = useState<UndoEntry | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const store = useRef<Persistence | null>(null);
   const live = useRef<Doc>(doc);
+  const erasures = useRef(0);
 
   const [revision, setRevision] = useState(0);
 
@@ -141,6 +164,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         console.warn('could not read the local store', e);
         store.current = opened ?? jsonPersistence();
         setLoadError(e instanceof Error ? e.message : String(e));
+        setLoadFailed(true);
       } finally {
         if (alive) setReady(true);
       }
@@ -364,12 +388,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const undo: Store['undo'] = useCallback(() => {
     const last = undoable;
     if (!last) return;
+    // Restamped: the topic goes back to how it was, but as a new edit. With
+    // its old timestamp it would lose to the rated copy if that had already
+    // synced, and the next sync would quietly put the rating back.
+    const restored: Topic = { ...last.topic, updated_at: nowIso() };
     commit({
       ...live.current,
-      topics: live.current.topics.map((t) => (t.id === last.topic.id ? last.topic : t)),
+      topics: live.current.topics.map((t) => (t.id === last.topic.id ? restored : t)),
       reviews: live.current.reviews.filter((r) => r.id !== last.reviewId),
     });
-    persist('topics', [last.topic]);
+    persist('topics', [restored]);
     store.current?.remove('reviews', [last.reviewId]).catch(() => {});
     setUndoable(null);
   }, [commit, persist, undoable]);
@@ -397,9 +425,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const replaceDoc = useCallback(
-    async (next: Doc, opts?: { fromSync?: boolean }) => {
-      commit(next, opts);
+    async (next: Doc) => {
+      commit(next);
       await store.current?.replace(next);
+    },
+    [commit],
+  );
+
+  const applyRemote = useCallback(
+    async (change: (live: Doc) => { doc: Doc; patch: LocalPatch } | null) => {
+      const p = store.current;
+      if (!p) throw new Error('There is nowhere on this device to save what sync downloaded.');
+      const result = change(live.current);
+      if (!result) return;
+      commit(result.doc, { fromSync: true });
+
+      const { upserts, removes, settings } = result.patch;
+      const writes: Promise<void>[] = [];
+      for (const [table, rows] of Object.entries(upserts) as [CollectionName, Collections[CollectionName]][]) {
+        if (rows.length) writes.push(p.upsert(table, rows));
+      }
+      for (const [table, ids] of Object.entries(removes) as [CollectionName, string[]][]) {
+        if (ids.length) writes.push(p.remove(table, ids));
+      }
+      if (settings) writes.push(p.saveSettings(settings));
+      await Promise.all(writes);
     },
     [commit],
   );
@@ -409,6 +459,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return {
       ready,
       loadError,
+      loadFailed,
       saveError,
       revision,
       doc,
@@ -436,8 +487,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
        * Leaving the topics behind would strand them: nothing lists a topic
        * whose skill is gone, so they would be invisible and undeletable, and
        * the reviews under them would keep counting toward a history nobody
-       * can see. The cascade matches the server's `on delete cascade`, so a
-       * device and its backup agree about what a deletion means.
+       * can see. Sync sends each removed row up as a deletion, and sweeps the
+       * same orphans on other devices (`sweepOrphans`), so every copy agrees
+       * about what deleting a skill means.
        */
       deleteSkill: async (id) => {
         const doomedTopics = live.current.topics.filter((x) => x.skill_id === id).map((x) => x.id);
@@ -469,22 +521,51 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // the same parser — so a file written by an older build still imports,
       // and one written today will still import later.
       exportJson: () => serialiseForExport(live.current),
+      // Every imported row is stamped as a new edit. Import replaces what is
+      // here, and it has to replace what is synced too: with the timestamps
+      // the file was exported with, any row edited since would lose to the
+      // newer copy on the server, and the import would partly undo itself on
+      // the next sync.
       importJson: async (raw: string) => {
-        await replaceDoc(parseDocument(raw).doc);
+        await replaceDoc(restamp(parseDocument(raw).doc, nowIso()));
       },
       eraseEverything: async () => {
+        // First, before anything is cleared: a sync already running must see
+        // this before it next looks at the (now empty) document.
+        erasures.current++;
         commit(emptyDoc());
         await store.current?.reset();
         setUndoable(null);
       },
       replaceDoc,
+      current: () => live.current,
+      applyRemote,
+      generation: () => erasures.current,
+      readMeta: async (key) => (store.current ? store.current.readMeta(key) : null),
+      writeMeta: async (key, value) => {
+        if (!store.current) throw new Error('There is nowhere on this device to save sync progress.');
+        await store.current.writeMeta(key, value);
+      },
     };
   }, [
-    createSkill, day, doc, loadError, logStudy, patchSkill, patchTopic, rate, ready,
+    applyRemote, createSkill, day, doc, loadError, loadFailed, logStudy, patchSkill, patchTopic, rate, ready,
     redistributeToday, replaceDoc, revision, saveError, undo, undoable, updateSettings, commit,
   ]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+}
+
+/** Every row and the settings, stamped `at`. */
+export function restamp(doc: Doc, at: string): Doc {
+  const stamp = <T extends { updated_at: string }>(rows: T[]) => rows.map((r) => ({ ...r, updated_at: at }));
+  return {
+    skills: stamp(doc.skills),
+    topics: stamp(doc.topics),
+    reviews: stamp(doc.reviews),
+    log_entries: stamp(doc.log_entries),
+    pairs: stamp(doc.pairs),
+    settings: { ...doc.settings, updated_at: at },
+  };
 }
 
 export function useStore(): Store {

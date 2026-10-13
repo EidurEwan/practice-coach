@@ -180,3 +180,33 @@ describe('opening what an earlier build saved', () => {
     expect(keys.some((k) => k.startsWith('interval:unreadable'))).toBe(true);
   });
 });
+
+describe('sync bookkeeping kept beside the document', () => {
+  beforeEach(reset);
+
+  it('reads back what was written, per key', async () => {
+    const p = jsonPersistence();
+    await p.writeMeta('sync:a', 'one');
+    await p.writeMeta('sync:b', 'two');
+    expect(await p.readMeta('sync:a')).toBe('one');
+    expect(await jsonPersistence().readMeta('sync:b')).toBe('two');
+    expect(await p.readMeta('sync:c')).toBeNull();
+  });
+
+  /**
+   * If the document is wiped and the record of what the server holds is not,
+   * the next sync sees every row "deleted here" and uploads the deletions.
+   */
+  it('goes when the document is erased', async () => {
+    const p = jsonPersistence();
+    await p.upsert('skills', [skill({ id: 's' })]);
+    await p.writeMeta('sync:a', 'base');
+    await p.reset();
+    expect(await p.readMeta('sync:a')).toBeNull();
+  });
+
+  it('treats unreadable bookkeeping as none', async () => {
+    await AsyncStorage.setItem('interval:meta', '{ nope');
+    expect(await jsonPersistence().readMeta('sync:a')).toBeNull();
+  });
+});

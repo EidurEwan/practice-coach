@@ -21,7 +21,16 @@ export interface Persistence {
   upsert<K extends CollectionName>(table: K, rows: Collections[K]): Promise<void>;
   remove(table: CollectionName, ids: string[]): Promise<void>;
   saveSettings(settings: Settings): Promise<void>;
-  /** Replaces everything — used by import and by the first pull after sign-in. */
+  /** Replaces everything — used by import and by deleting a skill. */
   replace(doc: Doc): Promise<void>;
+  /** Wipes the document and every meta value with it. */
   reset(): Promise<void>;
+  /**
+   * Bookkeeping that belongs to the data beside it — sync's record of what
+   * the server holds. It lives in the same store on purpose: if the document
+   * is lost or reset, this goes with it, and sync starts over by downloading
+   * rather than concluding that every row was deleted here.
+   */
+  readMeta(key: string): Promise<string | null>;
+  writeMeta(key: string, value: string): Promise<void>;
 }
