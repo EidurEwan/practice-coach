@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { addDays, backIn, daysBetween, formatShort, inWords, relativePast } from '../engine/dates';
 import { GENRE_EXAMPLE, methodFor } from '../engine/genres';
 import { committed } from '../ui/feedback';
+import { daysEarly, needsEncoding, parseSyllabus } from '../engine/intake';
 import { badgeFor } from '../engine/plan';
 import { applyLog, firstInterval } from '../engine/schedule';
 import { useNav } from '../nav/router';
@@ -21,6 +22,8 @@ import {
   PrimaryButton,
   Row,
   Field,
+  Segmented,
+  TextButton,
   Toggle,
   Txt,
 } from '../ui/primitives';
@@ -40,9 +43,18 @@ export function LogScreen() {
   const [pairs, setPairs] = useState<Record<string, boolean>>({});
   const [ago, setAgo] = useState(0);
   const [saved, setSaved] = useState<string | null>(null);
+  const [mode, setMode] = useState<'one' | 'list'>('one');
+  const [list, setList] = useState('');
+  const [cue, setCue] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [encoding, setEncoding] = useState('');
+  const [cardOpen, setCardOpen] = useState(false);
+  const [anyway, setAnyway] = useState(false);
 
   const skill = skills.find((s) => s.id === skillId) ?? skills[0];
   const studiedOn = addDays(day, -ago);
+  // Flashcard genres are cards by nature; everywhere else a card is optional.
+  const deck = skill?.genre === 'language' || skill?.genre === 'memorization';
 
   const topics = useMemo(
     () => doc.topics.filter((x) => !x.archived_at && x.skill_id === skill?.id),
@@ -54,6 +66,17 @@ export function LogScreen() {
     [title, topics],
   );
 
+  const parsed = useMemo(() => parseSyllabus(list), [list]);
+  const fresh = useMemo(() => {
+    const known = new Set(topics.map((x) => x.title.trim().toLowerCase()));
+    return parsed.filter((x) => !known.has(x.toLowerCase()));
+  }, [parsed, topics]);
+
+  // A new memorization fact needs an encoding; one already tracked has had its chance.
+  const missingEncoding = !!skill && !existing && needsEncoding(skill.genre, encoding);
+  const early = existing ? daysEarly(existing, studiedOn) : 0;
+  const blockedEarly = early > 0 && !anyway;
+
   const loggedToday = doc.log_entries
     .filter((e) => e.studied_on === day)
     .slice()
@@ -63,14 +86,33 @@ export function LogScreen() {
   const preview = useMemo(() => {
     if (!skill) return '';
     const days = existing
-      ? applyLog(existing, skill.genre, studiedOn, shaky).interval_days
-      : firstInterval(skill.genre, shaky);
+      ? applyLog(existing, skill.genre, studiedOn, shaky, skill.calibration).interval_days
+      : firstInterval(skill.genre, shaky, skill.calibration);
     const left = days - ago;
     return left <= 0 ? 'due now' : backIn(left);
   }, [ago, existing, shaky, skill, studiedOn]);
 
+  const listPreview = useMemo(() => {
+    if (!skill) return '';
+    const left = firstInterval(skill.genre, false, skill.calibration) - ago;
+    return left <= 0 ? 'due now' : backIn(left);
+  }, [ago, skill]);
+
+  const reset = () => {
+    setTitle('');
+    setSub('');
+    setCue('');
+    setAnswer('');
+    setEncoding('');
+    setCardOpen(false);
+    setShaky(false);
+    setPairs({});
+    setAgo(0);
+    setAnyway(false);
+  };
+
   const commit = () => {
-    if (!skill || !title.trim()) return;
+    if (!skill || !title.trim() || missingEncoding || blockedEarly) return;
     const topic = store.logStudy({
       skillId: skill.id,
       topicId: existing?.id ?? null,
@@ -79,15 +121,25 @@ export function LogScreen() {
       feltShaky: shaky,
       studiedOn,
       confusableWith: Object.keys(pairs).filter((k) => pairs[k]),
+      cue,
+      answer,
+      encoding,
     });
     committed();
     setSaved(topic.title);
-    setTitle('');
-    setSub('');
-    setShaky(false);
-    setPairs({});
+    reset();
+  };
+
+  const commitList = () => {
+    if (!skill || !fresh.length) return;
+    const n = store.logMany(skill.id, fresh, studiedOn);
+    committed();
+    setSaved(`${n} ${n === 1 ? 'topic' : 'topics'}`);
+    setList('');
     setAgo(0);
   };
+
+  const listBlocked = skill?.genre === 'memorization';
 
   if (!skill) {
     return (
@@ -134,6 +186,72 @@ export function LogScreen() {
           </Row>
 
           <View style={{ marginTop: 18 }}>
+            <Segmented
+              options={[
+                { key: 'one', label: 'One topic' },
+                { key: 'list', label: 'Paste a list' },
+              ]}
+              value={mode}
+              onChange={(m) => {
+                setMode(m);
+                setSaved(null);
+              }}
+            />
+          </View>
+
+          {mode === 'list' ? (
+            <View style={{ marginTop: 16 }}>
+              <Label>Syllabus</Label>
+              {listBlocked ? (
+                <Txt v="secondary" c={t.c.mut} style={{ marginTop: 8, lineHeight: 19 }}>
+                  Memorization facts go in one at a time. Each needs an encoding — a mnemonic, an image, a chunking —
+                  before it is scheduled, because drilling an unencoded fact is the slowest way to learn it.
+                </Txt>
+              ) : (
+                <>
+                  <View style={{ marginTop: 8 }}>
+                    <Field
+                      value={list}
+                      onChangeText={(v) => {
+                        setList(v);
+                        setSaved(null);
+                      }}
+                      placeholder={'1. Kinematics\n2. Forces\n2.1 Newton’s laws'}
+                      multiline
+                      autoCapitalize="none"
+                    />
+                  </View>
+                  <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 7, lineHeight: 18 }}>
+                    One topic per line. Numbering and bullets come off; anything already tracked is skipped.
+                  </Txt>
+                  {parsed.length ? (
+                    <View style={{ marginTop: 12, gap: 4 }}>
+                      {fresh.slice(0, 6).map((x) => (
+                        <Row key={x} gap={8}>
+                          <Dot color={t.hue(skill.hue_index)} size={6} />
+                          <Txt v="secondary" numberOfLines={1} style={{ flex: 1 }}>
+                            {x}
+                          </Txt>
+                        </Row>
+                      ))}
+                      <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 4 }}>
+                        {[
+                          fresh.length > 6 ? `and ${fresh.length - 6} more` : null,
+                          parsed.length > fresh.length ? `${parsed.length - fresh.length} already tracked` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Txt>
+                    </View>
+                  ) : null}
+                </>
+              )}
+            </View>
+          ) : null}
+
+          {mode === 'one' ? (
+          <>
+          <View style={{ marginTop: 18 }}>
             <Label>Topic</Label>
             <View style={{ marginTop: 8 }}>
               <Field
@@ -141,6 +259,7 @@ export function LogScreen() {
                 onChangeText={(v) => {
                   setTitle(v);
                   setSaved(null);
+                  setAnyway(false);
                 }}
                 placeholder={GENRE_EXAMPLE[skill?.genre ?? 'reasoning'].topic}
               />
@@ -158,6 +277,40 @@ export function LogScreen() {
               <Field value={sub} onChangeText={setSub} placeholder={GENRE_EXAMPLE[skill?.genre ?? 'reasoning'].sub} />
             </View>
           </View>
+
+          {deck || cardOpen ? (
+            <Row gap={10} style={{ marginTop: 16 }}>
+              <View style={{ flex: 1 }}>
+                <Field label="Cue" value={cue} onChangeText={setCue} placeholder={existing?.cue ?? 'The prompt'} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field label="Answer" value={answer} onChangeText={setAnswer} placeholder={existing?.answer ?? 'Hidden until revealed'} />
+              </View>
+            </Row>
+          ) : (
+            <TextButton
+              label="Add a cue and answer"
+              color={t.c.acc}
+              onPress={() => setCardOpen(true)}
+              style={{ alignItems: 'flex-start', marginTop: 4 }}
+            />
+          )}
+
+          {skill.genre === 'memorization' ? (
+            <View style={{ marginTop: 16 }}>
+              <Field
+                label="Encoding"
+                hint={existing ? (existing.encoding ? 'Kept unless changed' : 'Optional') : 'Required'}
+                value={encoding}
+                onChangeText={setEncoding}
+                placeholder={existing?.encoding ?? 'A mnemonic, an image, a chunking'}
+              />
+              <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 7, lineHeight: 18 }}>
+                How you will remember it. Repeating an unencoded fact is the slowest way there is to learn it, so a new one
+                is not scheduled without this.
+              </Txt>
+            </View>
+          ) : null}
 
           <Row gap={12} style={{ marginTop: 18 }}>
             <View style={{ flex: 1 }}>
@@ -190,6 +343,8 @@ export function LogScreen() {
               </Row>
             </>
           ) : null}
+          </>
+          ) : null}
 
           <Row align="baseline" gap={10} style={{ marginTop: 18, justifyContent: 'space-between' }}>
             <Label>Studied on</Label>
@@ -201,7 +356,10 @@ export function LogScreen() {
           <Row gap={3} style={{ marginTop: 8, backgroundColor: t.c.sunk, borderRadius: radius.input, padding: 3 }}>
             <Press
               scale={0.94}
-              onPress={() => setAgo((n) => Math.min(365, n + 1))}
+              onPress={() => {
+                setAgo((n) => Math.min(365, n + 1));
+                setAnyway(false);
+              }}
               accessibilityLabel="A day earlier"
               style={{ width: 42, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}
             >
@@ -224,7 +382,10 @@ export function LogScreen() {
             <Press
               scale={0.94}
               disabled={ago === 0}
-              onPress={() => setAgo((n) => Math.max(0, n - 1))}
+              onPress={() => {
+                setAgo((n) => Math.max(0, n - 1));
+                setAnyway(false);
+              }}
               accessibilityLabel="A day later"
               style={{
                 width: 42,
@@ -250,7 +411,10 @@ export function LogScreen() {
                 key={label as string}
                 label={label as string}
                 selected={ago === value}
-                onPress={() => setAgo(value as number)}
+                onPress={() => {
+                  setAgo(value as number);
+                  setAnyway(false);
+                }}
                 style={{ minHeight: 32, paddingHorizontal: 11 }}
               />
             ))}
@@ -268,13 +432,59 @@ export function LogScreen() {
             </Disclose>
           ) : null}
 
-          <PrimaryButton
-            label={saved ? 'Logged — scheduled' : title.trim() ? `Log and schedule · ${preview}` : 'Log this topic'}
-            tone={saved ? 'done' : 'accent'}
-            disabled={!title.trim() && !saved}
-            onPress={commit}
-            style={{ marginTop: 20 }}
-          />
+          {mode === 'one' && existing && early > 0 ? (
+            <Disclose>
+              <View style={{ marginTop: 14, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 11, backgroundColor: t.c.ambT }}>
+                <Txt v="secondary" c={t.c.amb} style={{ lineHeight: 19 }}>
+                  {`Not due for ${early === 1 ? 'another day' : `${early} days`}. Drilling it now buys fluency you already have and spends the gap that makes the next review work.`}
+                </Txt>
+                {anyway ? (
+                  <Txt v="secondary" c={t.c.amb} style={{ marginTop: 6, fontWeight: '600' }}>
+                    Overridden — it will be logged.
+                  </Txt>
+                ) : (
+                  <TextButton label="Log it anyway" color={t.c.amb} onPress={() => setAnyway(true)} style={{ alignItems: 'flex-start' }} />
+                )}
+              </View>
+            </Disclose>
+          ) : null}
+
+          {mode === 'one' ? (
+            <PrimaryButton
+              label={
+                saved
+                  ? 'Logged — scheduled'
+                  : !title.trim()
+                    ? 'Log this topic'
+                    : missingEncoding
+                      ? 'Add an encoding to schedule it'
+                      : blockedEarly
+                        ? `Not due for ${early === 1 ? 'another day' : `${early} days`}`
+                        : `Log and schedule · ${preview}`
+              }
+              tone={saved ? 'done' : 'accent'}
+              disabled={!saved && (!title.trim() || missingEncoding || blockedEarly)}
+              onPress={commit}
+              style={{ marginTop: 20 }}
+            />
+          ) : (
+            <PrimaryButton
+              label={
+                saved
+                  ? `Logged ${saved}`
+                  : fresh.length
+                    ? `Log ${fresh.length} ${fresh.length === 1 ? 'topic' : 'topics'} · ${listPreview}`
+                    : 'Paste a list to log it'
+              }
+              tone={saved ? 'done' : 'accent'}
+              disabled={!saved && (listBlocked || !fresh.length)}
+              onPress={commitList}
+              style={{ marginTop: 20 }}
+            />
+          )}
+          {saved ? (
+            <TextButton label="Back to Today" color={t.c.acc} onPress={() => nav.go({ name: 'today' })} style={{ marginTop: 4 }} />
+          ) : null}
         </Card>
       </View>
 

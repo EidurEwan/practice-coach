@@ -73,6 +73,35 @@ future runs the real rating function, so it cannot disagree with the buttons.
 Chart colours live in `src/theme/viz.ts`, each set validated for contrast and
 colour-blind separation against both themes' surfaces.
 
+## The rest of APP.md
+
+**Today** can be stepped to any day. A past day takes ratings, recorded against
+that date with a warning saying so; a future day is a read-only preview. Cards
+with a cue and answer hide the answer until revealed. After a rating, a short
+card names the result and the next thing due — or, after a third miss in a
+row, asks which part is actually failing and saves it as the sub-skill. A skill
+whose target date has passed stops scheduling and gets a card saying what the
+season amounted to, with "Keep practising" to bring it back. The day copies as
+plain text (web) or goes to the share sheet. On the web, `1`–`4` rate the open
+card in the order of its rows (Failed, Hard, OK, Easy) and `Esc` closes it.
+
+**Log** takes one topic or a pasted list. The list parser
+(`src/engine/intake.ts`) strips `1.`, `2)`, `1.1`, `a)`, `(iv)` and bullets but
+leaves a bare leading number, since "3 sets of reps" is a title. Language and
+memorization topics take a cue and answer; memorization will not schedule a
+new fact without an encoding, and so is not offered the paste mode. Logging
+something that is not yet due is blocked, with "Log it anyway" to override.
+
+**Skills** can be edited (name, level, target date — a new date starts a new
+season and clears a pause), paused and resumed. New skills, here and in
+onboarding, take an optional level, target date and the forgetting-rate
+diagnostic, whose factor scales every interval for that skill. Topics open to
+an editor with archive; archived topics collect under their skill. Confusable
+pairs are held apart while either is shaky and then scheduled together as a
+discrimination drill. Older saved data and synced rows from older builds get
+the new fields filled with defaults on read (`withDefaults` in
+`src/store/format.ts`).
+
 ## How sync works
 
 Sync was rebuilt from scratch; the first version lost work in ordinary use

@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, Share, View } from 'react-native';
 import { bandFor, gapLabel, pipsFor } from '../engine/bands';
-import { addDays, backIn, dayOf, daysBetween, formatLong, inWords } from '../engine/dates';
-import { activeTopics, FLAG_LABEL, PlanItem, badgeFor } from '../engine/plan';
+import { addDays, backIn, Day, dayOf, daysBetween, formatLong, formatShort, inWords } from '../engine/dates';
+import { activeTopics, buildPlan, dayAsText, endedSeasons, FLAG_LABEL, PlanItem, badgeFor } from '../engine/plan';
 import { previewRatings } from '../engine/schedule';
 import { Rating } from '../engine/types';
 import { useNav } from '../nav/router';
@@ -12,19 +12,43 @@ import { radius } from '../theme/tokens';
 import { useStore } from '../store/store';
 import { finished, tapped } from '../ui/feedback';
 import { RecallChart, useRecall } from '../ui/charts';
-import { Check, Chevron, Forward } from '../ui/icons';
-import { Badge, CapacityBar, Card, Disclose, Dot, Label, Pips, Press, Row, Txt } from '../ui/primitives';
+import { Back, Check, Chevron, Forward } from '../ui/icons';
+import { Badge, CapacityBar, Card, Disclose, Dot, Field, Label, Pips, Press, Row, TextButton, Txt } from '../ui/primitives';
 import { Screen } from '../ui/shell';
+
+/** The four ratings in the order of their rows — and of the 1–4 keys. */
+const KEYED: Rating[] = ['failed', 'hard', 'ok', 'easy'];
+
+/** What the last rating did, for the session card that follows it. */
+type Last = {
+  topicId: string;
+  title: string;
+  rating: Rating;
+  interval: number;
+  weakened: boolean;
+  /** The topic's review stamp before this rating — back to it means the rating was undone. */
+  before: string | null;
+};
 
 export function TodayScreen() {
   const t = useTheme();
   const nav = useNav();
   const store = useStore();
-  const { plan, day, doc } = store;
+  const { day, doc } = store;
   const [openId, setOpenId] = useState<string | null>(null);
   const [whyOpen, setWhyOpen] = useState(false);
   const [backlogOpen, setBacklogOpen] = useState(false);
   const [redistributed, setRedistributed] = useState(false);
+  // Days from today, so the view stays on "yesterday" across midnight rather
+  // than on a fixed date that quietly becomes the day before yesterday.
+  const [offset, setOffset] = useState(0);
+  const [last, setLast] = useState<Last | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const viewDay = addDays(day, offset);
+  const past = offset < 0;
+  const future = offset > 0;
+  const plan = useMemo(() => (offset === 0 ? store.plan : buildPlan(doc, viewDay)), [doc, offset, store.plan, viewDay]);
 
   const n = plan.focus.length;
   const capacity = plan.capacity;
@@ -34,48 +58,152 @@ export function TodayScreen() {
       doc.reviews
         // The rating's own local day. Slicing the stored ISO string reads the
         // UTC date, which puts an evening rating in the Americas on tomorrow.
-        .filter((r) => dayOf(r.rated_at) === day)
+        .filter((r) => dayOf(r.rated_at) === viewDay)
         .map((r) => ({ review: r, topic: doc.topics.find((x) => x.id === r.topic_id) }))
         .filter((r) => r.topic),
-    [day, doc.reviews, doc.topics],
+    [viewDay, doc.reviews, doc.topics],
   );
 
   const nextUp = useMemo(() => {
-    const upcoming = activeTopics(doc)
-      .filter((x) => x.due_on > day)
+    const upcoming = activeTopics(doc, viewDay)
+      .filter((x) => x.due_on > viewDay)
       .sort((a, b) => (a.due_on < b.due_on ? -1 : 1));
     if (!upcoming.length) return null;
     const on = upcoming[0].due_on;
     return { on, count: upcoming.filter((x) => x.due_on === on).length };
-  }, [day, doc.topics]);
+  }, [viewDay, doc]);
 
-  const loggedToday = doc.log_entries.filter((e) => e.studied_on === day);
+  // Undo puts the topic back as it was; the card about that rating goes with it.
+  const lastLive = last && doc.topics.find((x) => x.id === last.topicId)?.last_reviewed_at !== last.before ? last : null;
+
+  const seasons = useMemo(() => (offset === 0 ? endedSeasons(doc, day) : []), [day, doc, offset]);
+  const loggedToday = doc.log_entries.filter((e) => e.studied_on === viewDay);
 
   const open = (id: string) => {
     setOpenId((prev) => (prev === id ? null : id));
     setWhyOpen(false);
   };
 
+  const go = (by: number) => {
+    setOffset((o) => (by === 0 ? 0 : o + by));
+    setOpenId(null);
+    setWhyOpen(false);
+    setBacklogOpen(false);
+    setLast(null);
+    setCopied(false);
+  };
+
   const rate = (item: PlanItem, rating: Rating) => {
+    if (future) return;
     // Clearing the last thing due is the one moment in the day worth marking,
     // so it gets a different feel from the rating before it. Read the count
     // before the store changes it.
-    const last = store.plan.focus.length <= 1;
-    store.rate(item.topic.id, rating);
-    if (last) finished();
+    const lastOne = plan.focus.length <= 1;
+    const result = store.rate(item.topic.id, rating, viewDay);
+    if (lastOne) finished();
     else tapped();
     setOpenId(null);
     setWhyOpen(false);
+    setLast(
+      result && rating !== 'pushed'
+        ? {
+            topicId: item.topic.id,
+            title: item.topic.title,
+            rating,
+            interval: result.interval,
+            weakened: result.weakened,
+            before: item.topic.last_reviewed_at,
+          }
+        : null,
+    );
   };
+
+  const copyDay = async () => {
+    const text = dayAsText(plan);
+    try {
+      if (Platform.OS === 'web') {
+        await globalThis.navigator?.clipboard?.writeText(text);
+        setCopied(true);
+      } else {
+        await Share.share({ message: text });
+      }
+    } catch {
+      // A refused clipboard or a dismissed share sheet is not an error worth showing.
+    }
+  };
+
+  // The web build is used at a desk: 1–4 rate the open card, Esc closes it.
+  const keys = useRef({ openId, plan, rate });
+  keys.current = { openId, plan, rate };
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const { openId: id, plan: p, rate: r } = keys.current;
+      if (e.key === 'Escape' && id) {
+        setOpenId(null);
+        return;
+      }
+      const k = Number(e.key);
+      const item = id ? p.focus.find((i) => i.topic.id === id) : null;
+      if (item && k >= 1 && k <= 4) {
+        e.preventDefault();
+        r(item, KEYED[k - 1]);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  const title = offset === 0 ? 'Today' : offset === -1 ? 'Yesterday' : offset === 1 ? 'Tomorrow' : formatShort(viewDay);
 
   return (
     <Screen>
       <Txt v="screenTitle" style={{ marginTop: 14 }}>
-        Today
+        {title}
       </Txt>
-      <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 3 }}>
-        {formatLong(day)}
-      </Txt>
+
+      <DateNav viewDay={viewDay} offset={offset} onStep={go} />
+
+      {past ? (
+        <Notice tone="warn">
+          {`You are rating against ${formatLong(viewDay)}. Each rating is recorded on that day and the next review is counted from it.`}
+        </Notice>
+      ) : future ? (
+        <Notice tone="calm">A look ahead — what is due that day if nothing changes. Ratings open on the day.</Notice>
+      ) : null}
+
+      {seasons.map(({ skill, topics, ratings }) => (
+        <SeasonOver
+          key={skill.id}
+          name={skill.name}
+          ended={skill.target_date!}
+          hue={t.hue(skill.hue_index)}
+          topics={topics}
+          ratings={ratings}
+          onKeep={() => store.updateSkill(skill.id, { target_date: null })}
+          onArchive={() => store.archiveSkill(skill.id)}
+        />
+      ))}
+
+      {lastLive ? (
+        <SessionNote
+          last={lastLive}
+          next={plan.focus[0] ?? null}
+          left={n}
+          onStart={(id) => {
+            setLast(null);
+            open(id);
+          }}
+          onSubSkill={(sub) => {
+            store.updateTopic(lastLive.topicId, { sub_skill: sub });
+            setLast({ ...lastLive, weakened: false });
+          }}
+          onDismiss={() => setLast(null)}
+        />
+      ) : null}
 
       {n > 0 ? (
         <>
@@ -95,7 +223,7 @@ export function TodayScreen() {
             {n} of your {capacity} a day
           </Txt>
 
-          {plan.over > 0 && !redistributed ? (
+          {offset === 0 && plan.over > 0 && !redistributed ? (
             <OverCapacity
               over={plan.over}
               movable={plan.movable.length}
@@ -108,9 +236,9 @@ export function TodayScreen() {
           ) : null}
 
           <Row align="baseline" style={{ marginTop: 24, justifyContent: 'space-between' }}>
-            <Label>Today's plan</Label>
+            <Label>{offset === 0 ? "Today's plan" : 'The plan'}</Label>
             <Txt v="label" c={t.c.fnt} style={{ opacity: 0.8, textTransform: 'none', letterSpacing: 0 }}>
-              Tap one to log it
+              {future ? 'Preview only' : Platform.OS === 'web' ? 'Open one, then 1–4 to rate' : 'Tap one to log it'}
             </Txt>
           </Row>
 
@@ -120,6 +248,8 @@ export function TodayScreen() {
                 key={item.topic.id}
                 item={item}
                 index={i}
+                on={viewDay}
+                readOnly={future}
                 open={openId === item.topic.id}
                 whyOpen={whyOpen}
                 onToggle={() => open(item.topic.id)}
@@ -132,7 +262,8 @@ export function TodayScreen() {
       ) : (
         <Cleared
           nextUp={nextUp}
-          day={day}
+          day={viewDay}
+          today={offset === 0}
           backlog={plan.backlog.length}
           rated={ratedToday.map(({ review, topic }) => ({
             title: topic!.title,
@@ -152,7 +283,7 @@ export function TodayScreen() {
           >
             <Txt v="secondary" c={t.c.acc} style={{ fontWeight: '500' }}>
               {backlogOpen ? 'Hide the ' : 'Show the '}
-              {plan.backlog.length} behind today
+              {plan.backlog.length} behind {offset === 0 ? 'today' : 'these'}
             </Txt>
             <Chevron open={backlogOpen} size={12} color={t.c.acc} />
           </Press>
@@ -191,7 +322,16 @@ export function TodayScreen() {
         </>
       ) : null}
 
-      <Label style={{ marginTop: 26 }}>Logged today</Label>
+      {n > 0 ? (
+        <TextButton
+          label={copied ? 'Copied to the clipboard' : Platform.OS === 'web' ? 'Copy the day as text' : 'Share the day as text'}
+          color={copied ? t.c.grn : t.c.acc}
+          onPress={copyDay}
+          style={{ alignItems: 'flex-start', marginTop: 4 }}
+        />
+      ) : null}
+
+      <Label style={{ marginTop: 26 }}>{offset === 0 ? 'Logged today' : `Logged ${formatShort(viewDay)}`}</Label>
       <Press onPress={() => nav.go({ name: 'log' })} scale={0.99} style={{ marginTop: 10 }}>
         <Card>
           <Row gap={12}>
@@ -235,6 +375,177 @@ export function TodayScreen() {
         </Card>
       </Press>
     </Screen>
+  );
+}
+
+/* --------------------------------------------------------- date navigation */
+
+function DateNav({ viewDay, offset, onStep }: { viewDay: Day; offset: number; onStep: (by: number) => void }) {
+  const t = useTheme();
+  const step = { width: 42, height: 38, borderRadius: 10, alignItems: 'center' as const, justifyContent: 'center' as const };
+  return (
+    <Row gap={3} style={{ marginTop: 10, backgroundColor: t.c.sunk, borderRadius: radius.input, padding: 3 }}>
+      <Press scale={0.94} onPress={() => onStep(-1)} accessibilityLabel="The day before" style={step}>
+        <Back size={14} color={t.c.mut} />
+      </Press>
+      <Press
+        scale={0.99}
+        disabled={offset === 0}
+        onPress={() => onStep(0)}
+        accessibilityLabel={offset === 0 ? formatLong(viewDay) : `${formatLong(viewDay)} — back to today`}
+        style={{ flex: 1, minHeight: 38, paddingVertical: 3, borderRadius: 10, backgroundColor: t.c.surf, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Txt v="secondary" style={{ fontWeight: '600', fontSize: 14 }}>
+          {formatLong(viewDay)}
+        </Txt>
+        {offset !== 0 ? (
+          <Txt v="label" c={t.c.acc} style={{ textTransform: 'none', letterSpacing: 0, marginTop: 1 }}>
+            Back to today
+          </Txt>
+        ) : null}
+      </Press>
+      <Press scale={0.94} onPress={() => onStep(1)} accessibilityLabel="The day after" style={step}>
+        <Forward size={14} color={t.c.mut} />
+      </Press>
+    </Row>
+  );
+}
+
+function Notice({ tone, children }: { tone: 'warn' | 'calm'; children: React.ReactNode }) {
+  const t = useTheme();
+  return (
+    <Disclose>
+      <View
+        style={{
+          marginTop: 12,
+          borderRadius: 10,
+          paddingHorizontal: 13,
+          paddingVertical: 11,
+          backgroundColor: tone === 'warn' ? t.c.ambT : t.c.sunk,
+        }}
+      >
+        <Txt v="secondary" c={tone === 'warn' ? t.c.amb : t.c.mut} style={{ lineHeight: 19 }}>
+          {children}
+        </Txt>
+      </View>
+    </Disclose>
+  );
+}
+
+/* ----------------------------------------------------------- season over */
+
+function SeasonOver({
+  name,
+  ended,
+  hue,
+  topics,
+  ratings,
+  onKeep,
+  onArchive,
+}: {
+  name: string;
+  ended: Day;
+  hue: string;
+  topics: number;
+  ratings: number;
+  onKeep: () => void;
+  onArchive: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <Disclose style={{ marginTop: 14 }}>
+      <Card>
+        <Row gap={9}>
+          <Dot color={hue} />
+          <Txt v="rowTitle" style={{ flex: 1 }}>
+            {name} — season over
+          </Txt>
+        </Row>
+        <Txt v="secondary" c={t.c.mut} style={{ marginTop: 6, lineHeight: 19 }}>
+          {`The target date, ${formatLong(ended)}, has passed, so ${name} has stopped scheduling. ` +
+            `${topics} ${topics === 1 ? 'topic' : 'topics'} and ${ratings} ${ratings === 1 ? 'rating' : 'ratings'} — ` +
+            'all of it kept. Keep practising to pick up where it left off.'}
+        </Txt>
+        <Row gap={14} style={{ marginTop: 6 }}>
+          <TextButton label="Keep practising" color={t.c.acc} onPress={onKeep} />
+          <TextButton label="Archive it" onPress={onArchive} />
+        </Row>
+      </Card>
+    </Disclose>
+  );
+}
+
+/* ----------------------------------------------------------- session note */
+
+function SessionNote({
+  last,
+  next,
+  left,
+  onStart,
+  onSubSkill,
+  onDismiss,
+}: {
+  last: Last;
+  next: PlanItem | null;
+  left: number;
+  onStart: (id: string) => void;
+  onSubSkill: (sub: string) => void;
+  onDismiss: () => void;
+}) {
+  const t = useTheme();
+  const [sub, setSub] = useState('');
+  const look = ratingColors(last.rating, t.c);
+
+  return (
+    <Disclose style={{ marginTop: 14 }}>
+      <Card>
+        <Row gap={9}>
+          <Txt v="label" c={look.fg} style={{ textTransform: 'none', letterSpacing: 0 }}>
+            {RATING_LABEL[last.rating]}
+          </Txt>
+          <Txt v="secondary" style={{ flex: 1 }} numberOfLines={1}>
+            {last.title}
+          </Txt>
+          <Txt v="secondary" c={t.c.fnt}>
+            {backIn(last.interval)}
+          </Txt>
+        </Row>
+
+        {last.weakened ? (
+          <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: t.c.line }}>
+            <Txt style={{ fontWeight: '600' }}>Three misses in a row. Which part is actually failing?</Txt>
+            <Txt v="secondary" c={t.c.mut} style={{ marginTop: 4, lineHeight: 19 }}>
+              Naming it turns “I can’t do this topic” into one thing to drill. It shows on the card from now on.
+            </Txt>
+            <View style={{ marginTop: 10 }}>
+              <Field value={sub} onChangeText={setSub} placeholder="The step where it goes wrong" onSubmitEditing={() => sub.trim() && onSubSkill(sub.trim())} />
+            </View>
+            <Row gap={14}>
+              <TextButton label="Save" color={t.c.acc} onPress={() => sub.trim() && onSubSkill(sub.trim())} />
+              <TextButton label="Not sure yet" onPress={onDismiss} />
+            </Row>
+          </View>
+        ) : next ? (
+          <Press
+            onPress={() => onStart(next.topic.id)}
+            accessibilityLabel={`Start ${next.topic.title}`}
+            style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 }}
+          >
+            <Txt v="secondary" c={t.c.acc} style={{ flex: 1, fontWeight: '500' }} numberOfLines={1}>
+              {`Next: ${next.topic.title}`}
+            </Txt>
+            <Txt v="secondary" c={t.c.fnt}>
+              {left === 1 ? 'the last one' : `${left} left`}
+            </Txt>
+            <Forward size={13} color={t.c.acc} />
+          </Press>
+        ) : (
+          <Txt v="secondary" c={t.c.grn} style={{ marginTop: 8 }}>
+            That is everything due.
+          </Txt>
+        )}
+      </Card>
+    </Disclose>
   );
 }
 
@@ -294,6 +605,8 @@ function OverCapacity({
 function PracticeCard({
   item,
   index,
+  on,
+  readOnly,
   open,
   whyOpen,
   onToggle,
@@ -302,6 +615,10 @@ function PracticeCard({
 }: {
   item: PlanItem;
   index: number;
+  /** The day being rated against — today, or an earlier one. */
+  on: Day;
+  /** A future day: shown, not rated. */
+  readOnly: boolean;
   open: boolean;
   whyOpen: boolean;
   onToggle: () => void;
@@ -309,16 +626,20 @@ function PracticeCard({
   onRate: (r: Rating) => void;
 }) {
   const t = useTheme();
-  const { day } = useStore();
   const hue = t.hue(item.skill.hue_index);
   const band = bandFor(item.topic.interval_days);
   const color = bandColor(band, t.c);
   const flag = item.flag ? flagColors(item.flag, t.c) : null;
   const curve = useRecall(item.topic.interval_days);
   const previews = useMemo(
-    () => previewRatings(item.topic, item.skill.genre, day),
-    [day, item.skill.genre, item.topic],
+    () => previewRatings(item.topic, item.skill.genre, on, item.skill.calibration),
+    [on, item.skill.calibration, item.skill.genre, item.topic],
   );
+  const { cue, answer, encoding } = item.topic;
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    if (!open) setRevealed(false);
+  }, [open]);
 
   return (
     <View>
@@ -347,6 +668,11 @@ function PracticeCard({
           <Txt v="secondary" c={t.c.mut} style={{ marginTop: 4, lineHeight: 18 }}>
             {item.method}
           </Txt>
+          {item.topic.sub_skill ? (
+            <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 3 }} numberOfLines={1}>
+              {`Focus: ${item.topic.sub_skill}`}
+            </Txt>
+          ) : null}
 
           <Row gap={8} style={{ marginTop: 9 }}>
             <Pips pips={pipsFor(band)} color={color} />
@@ -361,6 +687,36 @@ function PracticeCard({
 
         {open ? (
           <Disclose style={{ paddingHorizontal: 18, paddingBottom: 18 }}>
+            {cue || answer ? (
+              <View style={{ marginBottom: 14, borderRadius: radius.input, padding: 14, backgroundColor: t.c.sunk }}>
+                <Label>Prompt</Label>
+                <Txt style={{ marginTop: 6, fontSize: 17, lineHeight: 24 }}>{cue || item.topic.title}</Txt>
+                {answer || encoding ? (
+                  revealed ? (
+                    <Disclose>
+                      <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: t.c.line }}>
+                        {answer ? <Txt style={{ fontSize: 17, lineHeight: 24, fontWeight: '600' }}>{answer}</Txt> : null}
+                        {encoding ? (
+                          <Txt v="secondary" c={t.c.mut} style={{ marginTop: answer ? 6 : 0, lineHeight: 19 }}>
+                            {`Encoding: ${encoding}`}
+                          </Txt>
+                        ) : null}
+                      </View>
+                    </Disclose>
+                  ) : (
+                    <Press
+                      onPress={() => setRevealed(true)}
+                      accessibilityLabel="Reveal the answer"
+                      style={{ marginTop: 10, minHeight: 40, alignSelf: 'flex-start', justifyContent: 'center' }}
+                    >
+                      <Txt v="secondary" c={t.c.acc} style={{ fontWeight: '600' }}>
+                        Recall it first, then reveal
+                      </Txt>
+                    </Press>
+                  )
+                ) : null}
+              </View>
+            ) : null}
             <Press
               scale={1}
               onPress={onToggleWhy}
@@ -406,9 +762,15 @@ function PracticeCard({
               </Txt>
             </View>
 
+            {readOnly ? (
+              <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 14, lineHeight: 19 }}>
+                Ratings open on the day. Rated then, an OK would bring it back {backIn(previews[2].days).replace('back ', '')}.
+              </Txt>
+            ) : (
+            <>
             <Label style={{ marginTop: 14 }}>How did it go?</Label>
             <View style={{ marginTop: 9, gap: 7 }}>
-              {previews.map(({ rating, days }) => {
+              {previews.map(({ rating, days }, i) => {
                 const look = ratingColors(rating, t.c);
                 return (
                   <Press
@@ -416,6 +778,7 @@ function PracticeCard({
                     scale={0.98}
                     onPress={() => onRate(rating)}
                     accessibilityLabel={`${RATING_LABEL[rating]} — ${RATING_HELP[rating]} — ${backIn(days)}`}
+                    accessibilityHint={Platform.OS === 'web' ? `Key ${i + 1}` : undefined}
                     style={{
                       minHeight: 46,
                       borderRadius: radius.input,
@@ -451,6 +814,8 @@ function PracticeCard({
                 Didn't get to it — push back
               </Txt>
             </Press>
+            </>
+            )}
           </Disclose>
         ) : null}
       </View>
@@ -463,11 +828,13 @@ function PracticeCard({
 function Cleared({
   nextUp,
   day,
+  today,
   backlog,
   rated,
 }: {
   nextUp: { on: string; count: number } | null;
   day: string;
+  today: boolean;
   backlog: number;
   rated: { title: string; hue: string; rating: Rating; next: string }[];
 }) {
@@ -493,7 +860,7 @@ function Cleared({
           <Check size={30} color={t.c.grn} weight={2.2} />
         </View>
         <Txt v="clearedTitle" style={{ marginTop: 22, textAlign: 'center' }}>
-          Today's set is cleared
+          {today ? "Today's set is cleared" : rated.length ? 'That day’s set is cleared' : 'Nothing due that day'}
         </Txt>
         <Txt c={t.c.mut} style={{ marginTop: 8, textAlign: 'center', lineHeight: 22 }}>
           {returning}

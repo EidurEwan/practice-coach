@@ -29,9 +29,38 @@ export function curveAt(genre: Genre, n: number): number {
 }
 
 /** What a freshly logged topic gets before it has ever been rated. */
-export function firstInterval(genre: Genre, feltShaky: boolean): number {
-  if (feltShaky) return curveAt(genre, 0);
-  return curveAt(genre, 1);
+export function firstInterval(genre: Genre, feltShaky: boolean, calibration = 1): number {
+  return Math.max(1, Math.round(curveAt(genre, feltShaky ? 0 : 1) * calibration));
+}
+
+/** The diagnostic's clamp: no result moves a schedule further than this. */
+export const CALIBRATION_MIN = 0.6;
+export const CALIBRATION_MAX = 1.5;
+
+/** The stability a single exposure is taken to have, in days. */
+export const REFERENCE_STABILITY = 7;
+
+/** How sure the person was that they recalled it. */
+export type RecallAnswer = 'no' | 'partly' | 'yes';
+
+const RECALL_P: Record<RecallAnswer, number> = { no: 0.15, partly: 0.5, yes: 0.85 };
+
+/**
+ * The forgetting-rate diagnostic. Each answer is a real recall attempt at
+ * something learned `daysAgo` days ago. Recall after d days is exp(−d ÷ S), so
+ * each answer back-solves a stability S; the geometric mean of those is set
+ * against a 7-day single exposure. The ratio is square-root damped, so one
+ * shaky answer cannot blow up a schedule, then clamped to 0.6–1.5.
+ *
+ * Fast forgetters get compressed intervals, strong retainers stretched ones.
+ */
+export function calibrationFrom(answers: { daysAgo: number; recall: RecallAnswer }[]): number {
+  const usable = answers.filter((a) => a.daysAgo >= 1);
+  if (!usable.length) return 1;
+  const logS = usable.map((a) => Math.log(a.daysAgo / -Math.log(RECALL_P[a.recall])));
+  const stability = Math.exp(logS.reduce((x, y) => x + y, 0) / logS.length);
+  const factor = Math.sqrt(stability / REFERENCE_STABILITY);
+  return Math.round(clamp(factor, CALIBRATION_MIN, CALIBRATION_MAX) * 100) / 100;
 }
 
 export type Outcome = {
@@ -54,7 +83,7 @@ export type Outcome = {
  * outcome, which is what lets the buttons state their consequence before they
  * are pressed — the preview and the commit run this identical function.
  */
-export function applyRating(topic: Topic, genre: Genre, rating: Rating, on: Day): Outcome {
+export function applyRating(topic: Topic, genre: Genre, rating: Rating, on: Day, calibration = 1): Outcome {
   const base = {
     interval_days: topic.interval_days,
     repetition: topic.repetition,
@@ -82,7 +111,7 @@ export function applyRating(topic: Topic, genre: Genre, rating: Rating, on: Day)
     // applying the penalty again compounded it on every rating — a card with
     // two weak points stalled at one day and stayed there, however many OKs
     // it got. The penalty is applied once, below, to whatever this produces.
-    const unpenalised = topic.interval_days / topic.penalty;
+    const unpenalised = topic.interval_days / (topic.penalty * calibration);
     switch (rating) {
       case 'failed':
         repetition = 0;
@@ -149,7 +178,7 @@ export function applyRating(topic: Topic, genre: Genre, rating: Rating, on: Day)
     streak = 0;
   }
 
-  let interval_days = Math.max(1, Math.round(raw * penalty));
+  let interval_days = Math.max(1, Math.round(raw * penalty * calibration));
   // A success never brings a topic back sooner than last time. Rounding a
   // short, penalised interval can otherwise land on the same day count — or
   // fewer — and an OK that changes nothing reads as the app not listening.
@@ -187,10 +216,10 @@ export type RatingPreview = { rating: Rating; days: number };
  * The four numbers on the rating rows. Same code path as the commit, so the
  * promise on the button is the promise the schedule keeps.
  */
-export function previewRatings(topic: Topic, genre: Genre, on: Day): RatingPreview[] {
+export function previewRatings(topic: Topic, genre: Genre, on: Day, calibration = 1): RatingPreview[] {
   return (['failed', 'hard', 'ok', 'easy'] as Rating[]).map((rating) => ({
     rating,
-    days: applyRating(topic, genre, rating, on).interval_days,
+    days: applyRating(topic, genre, rating, on, calibration).interval_days,
   }));
 }
 
@@ -204,9 +233,15 @@ export function applyLog(
   genre: Genre,
   studiedOn: Day,
   feltShaky: boolean,
+  calibration = 1,
 ): { interval_days: number; due_on: Day } {
-  const base = topic.state === 'new' ? firstInterval(genre, feltShaky) : topic.interval_days;
-  const interval = Math.max(1, Math.round((feltShaky && topic.state !== 'new' ? base * 0.6 : base) * topic.penalty));
+  // A topic's stored interval already carries its penalty and calibration, so
+  // they are applied only to a fresh one. Multiplying the stored interval by
+  // the penalty again shrank a weak topic a little more on every log.
+  const interval =
+    topic.state === 'new'
+      ? Math.max(1, Math.round(firstInterval(genre, feltShaky, calibration) * topic.penalty))
+      : Math.max(1, Math.round(feltShaky ? topic.interval_days * 0.6 : topic.interval_days));
   return { interval_days: interval, due_on: addDays(studiedOn, interval) };
 }
 
@@ -216,11 +251,11 @@ export function applyLog(
  * rating OK would actually do — the two used to be separate arithmetic, and
  * the projection inherited every bug the rating had and some of its own.
  */
-function okRun(topic: Topic, genre: Genre, count: number): Topic[] {
+function okRun(topic: Topic, genre: Genre, count: number, calibration: number): Topic[] {
   const out: Topic[] = [];
   let cur = topic;
   for (let i = 0; i < count; i++) {
-    const next = applyRating(cur, genre, 'ok', cur.due_on);
+    const next = applyRating(cur, genre, 'ok', cur.due_on, calibration);
     cur = { ...cur, ...next, state: next.state };
     out.push(cur);
   }
@@ -228,19 +263,24 @@ function okRun(topic: Topic, genre: Genre, count: number): Topic[] {
 }
 
 /** The full projected chain from a topic's current position, on unbroken OKs. */
-export function projectedChain(topic: Topic, genre: Genre, count: number): number[] {
-  return okRun(topic, genre, count).map((t) => t.interval_days);
+export function projectedChain(topic: Topic, genre: Genre, count: number, calibration = 1): number[] {
+  return okRun(topic, genre, count, calibration).map((t) => t.interval_days);
 }
 
 /** The dates a topic lands on next, if every rating is OK. */
-export function projectedDates(topic: Topic, genre: Genre, count: number): { day: Day; index: number }[] {
+export function projectedDates(
+  topic: Topic,
+  genre: Genre,
+  count: number,
+  calibration = 1,
+): { day: Day; index: number }[] {
   const out: { day: Day; index: number }[] = [{ day: topic.due_on, index: 0 }];
-  okRun(topic, genre, count - 1).forEach((t, i) => out.push({ day: t.due_on, index: i + 1 }));
+  okRun(topic, genre, count - 1, calibration).forEach((t, i) => out.push({ day: t.due_on, index: i + 1 }));
   return out;
 }
 
-export function newTopicDefaults(genre: Genre, feltShaky: boolean, studiedOn: Day) {
-  const interval = firstInterval(genre, feltShaky);
+export function newTopicDefaults(genre: Genre, feltShaky: boolean, studiedOn: Day, calibration = 1) {
+  const interval = firstInterval(genre, feltShaky, calibration);
   return {
     state: 'new' as TopicState,
     interval_days: interval,

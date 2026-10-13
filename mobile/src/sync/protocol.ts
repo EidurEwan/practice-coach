@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS, Doc, Settings } from '../engine/types';
+import { withDefaults } from '../store/format';
 import { CollectionName, COLLECTIONS, Collections } from '../store/persistence';
 
 /**
@@ -265,7 +266,7 @@ export function applyIncoming(live: Doc, base: Base, rows: WireRow[]): Applied {
     nextBase[c][row.id] = remoteAt;
     if (mine && stampOf(mine.updated_at) > remoteAt) continue;
 
-    const theirs = row.data as unknown as Stamped;
+    const theirs = withDefaults(c, row.data) as unknown as Stamped;
     if (mine && sameRow(mine, theirs)) continue;
     rows_.set(row.id, theirs);
     removes.get(c)?.delete(row.id);

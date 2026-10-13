@@ -28,6 +28,7 @@ import {
 } from '../ui/primitives';
 import { ACCOUNTS_ENABLED, ACCOUNTS_SOON_BODY } from '../sync/availability';
 import { DEVICE } from '../ui/copy';
+import { SkillContext } from './skillParts';
 import { Logo, Screen } from '../ui/shell';
 
 const COPY: [string, string][] = [
@@ -320,6 +321,9 @@ function AddSkillsStep() {
   const [name, setName] = useState('');
   const [override, setOverride] = useState<Genre | null>(null);
   const [kind, setKind] = useState<PhysicalKind>('closed');
+  const [level, setLevel] = useState('');
+  const [target, setTarget] = useState<string | null>(null);
+  const [calibration, setCalibration] = useState(1);
   const detection = useMemo(() => detectGenre(name), [name]);
   const added = store.doc.skills.filter((s) => !s.archived_at);
 
@@ -394,6 +398,16 @@ function AddSkillsStep() {
           </Row>
         </View>
 
+        <SkillContext
+          genre={genre}
+          level={level}
+          onLevel={setLevel}
+          target={target}
+          onTarget={setTarget}
+          calibration={calibration}
+          onCalibration={setCalibration}
+        />
+
         <PrimaryButton
           label={name.trim() ? `Add ${name.trim()}` : 'Add skill'}
           disabled={!name.trim()}
@@ -403,10 +417,16 @@ function AddSkillsStep() {
               name,
               genre,
               physical_kind: genre === 'physical' ? kind : null,
+              level,
+              target_date: target,
+              calibration,
             });
             setName('');
             setOverride(null);
             setKind('closed');
+            setLevel('');
+            setTarget(null);
+            setCalibration(1);
           }}
         />
       </Card>
@@ -443,7 +463,7 @@ function FirstTopicStep() {
   const already = store.doc.topics.some((x) => x.skill_id === skill?.id && x.title === title.trim());
 
   const note = title.trim()
-    ? `"${title.trim()}" will be due ${skill ? inWords(firstInterval(skill.genre, false)) : 'on its curve'}.`
+    ? `"${title.trim()}" will be due ${skill ? inWords(firstInterval(skill.genre, false, skill.calibration)) : 'on its curve'}.`
     : 'Whatever you name is scheduled on the curve for its skill.';
 
   return (

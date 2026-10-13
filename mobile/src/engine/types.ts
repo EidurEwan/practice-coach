@@ -12,6 +12,21 @@ export type Skill = {
   physical_kind: PhysicalKind | null;
   /** Position in the skill-hue cycle. Fixed at creation so a colour never moves. */
   hue_index: number;
+  /** Free text: "HL", "A-Level", "Grade 6". Shown, never computed with. */
+  level: string | null;
+  /**
+   * When this subject's season ends — the exam. Inside the pre-deadline
+   * window practice turns exam-format; once it has passed, the subject stops
+   * scheduling until it is extended or cleared.
+   */
+  target_date: Day | null;
+  /**
+   * The forgetting-rate diagnostic's result: every interval for this skill is
+   * multiplied by it. 1 until a diagnostic is taken; clamped 0.6–1.5.
+   */
+  calibration: number;
+  /** Set while the subject is paused by hand. Nothing is scheduled meanwhile. */
+  paused_at: string | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -22,6 +37,14 @@ export type Topic = {
   skill_id: string;
   title: string;
   sub_skill: string | null;
+  /** For a card: the prompt, and what it should bring back. Optional on every genre. */
+  cue: string | null;
+  answer: string | null;
+  /**
+   * How a fact was made memorable at first exposure — a mnemonic, an image, a
+   * chunking. Memorization refuses to schedule a fact without one.
+   */
+  encoding: string | null;
   state: TopicState;
   interval_days: number;
   /** Only per-item genres move this; curve genres leave it at its default. */

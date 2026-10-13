@@ -39,7 +39,10 @@ export function bandColors(tone: BandTone | 'fnt', c: Palette): { fg: string; bg
   }
 }
 
-/** Flag badges: red for late or failing, amber for caution. */
+/**
+ * Flag badges: red for late or failing, amber for caution, and the accent for
+ * a deliberate change of method that is not a warning at all.
+ */
 export function flagColors(flag: Flag, c: Palette): { fg: string; bg: string } {
   switch (flag) {
     case 'overdue':
@@ -48,6 +51,8 @@ export function flagColors(flag: Flag, c: Palette): { fg: string; bg: string } {
     case 'plateau':
     case 'deadline':
       return { fg: c.amb, bg: c.ambT };
+    case 'collide':
+      return { fg: c.acc, bg: c.accT };
   }
 }
 

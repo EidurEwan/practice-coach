@@ -51,9 +51,9 @@ export function normaliseDoc(value: unknown): Doc {
   for (const name of COLLECTIONS) {
     const rows = value[name];
     if (!Array.isArray(rows)) continue;
-    (base as Record<string, unknown>)[name] = rows.filter(
-      (r) => isObject(r) && typeof r.id === 'string' && r.id.length > 0,
-    );
+    (base as Record<string, unknown>)[name] = rows
+      .filter((r) => isObject(r) && typeof r.id === 'string' && r.id.length > 0)
+      .map((r) => withDefaults(name, r));
   }
 
   if (isObject(value.settings)) {
@@ -61,6 +61,27 @@ export function normaliseDoc(value: unknown): Doc {
   }
 
   return base;
+}
+
+/**
+ * Fields added after a row was first written, filled with what they mean when
+ * absent. A row from an older build — saved here, imported, or synced from a
+ * device that has not updated — reads exactly as it did, and nothing else in
+ * the row is touched.
+ */
+export function withDefaults<T>(collection: string, row: T): T {
+  const r = row as Record<string, unknown>;
+  if (collection === 'skills') {
+    return {
+      level: null,
+      target_date: null,
+      paused_at: null,
+      ...r,
+      calibration: typeof r.calibration === 'number' && r.calibration > 0 ? r.calibration : 1,
+    } as T;
+  }
+  if (collection === 'topics') return { cue: null, answer: null, encoding: null, ...r } as T;
+  return row;
 }
 
 /** Is this the version 2 envelope, rather than a bare version 1 document? */

@@ -396,6 +396,7 @@ export function Field({
   keyboardType,
   onSubmitEditing,
   bordered,
+  multiline,
 }: {
   value: string;
   onChangeText: (v: string) => void;
@@ -408,6 +409,8 @@ export function Field({
   onSubmitEditing?: () => void;
   /** The account screens use a bordered field on `surf`; forms use a sunk one. */
   bordered?: boolean;
+  /** For pasting a list: grows to a few lines and wraps instead of scrolling sideways. */
+  multiline?: boolean;
 }) {
   const t = useTheme();
   const [focused, setFocused] = React.useState(false);
@@ -446,11 +449,16 @@ export function Field({
           autoCorrect={false}
           keyboardType={keyboardType}
           onSubmitEditing={onSubmitEditing}
+          multiline={multiline}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           accessibilityLabel={label ?? placeholder}
           // The field draws its own focus ring; the browser's would sit on top of it.
-          style={[{ fontSize: 16, color: t.c.tx, paddingVertical: 12 }, NO_OUTLINE]}
+          style={[
+            { fontSize: 16, color: t.c.tx, paddingVertical: 12 },
+            multiline ? { minHeight: 132, textAlignVertical: 'top', lineHeight: 22 } : null,
+            NO_OUTLINE,
+          ]}
         />
       </View>
     </View>

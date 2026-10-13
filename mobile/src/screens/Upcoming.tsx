@@ -486,7 +486,7 @@ function ByTopic({ filter }: { filter: string | null }) {
                   const color = bandColor(band, t.c);
                   const late = daysBetween(topic.due_on, day);
                   const from = late > 0 ? { ...topic, due_on: day } : topic;
-                  const chain = projectedChain(from, skill.genre, 3);
+                  const chain = projectedChain(from, skill.genre, 3, skill.calibration);
                   const strong = reachesBand(from, skill, 4, day);
                   return (
                     <View key={topic.id} style={{ paddingVertical: 12, borderTopWidth: k === 0 ? 0 : 1, borderTopColor: t.c.line }}>

@@ -54,7 +54,7 @@ function keepUp(topic: Topic, skill: Skill, from: Day, until: Day): SimReview[] 
   let cur: Topic = daysBetween(topic.due_on, from) > 0 ? { ...topic, due_on: from } : topic;
   for (let i = 0; i < 400 && cur.due_on <= until; i++) {
     const on = cur.due_on;
-    const next = applyRating(cur, skill.genre, 'ok', on);
+    const next = applyRating(cur, skill.genre, 'ok', on, skill.calibration);
     out.push({ day: on, interval: next.interval_days });
     cur = { ...cur, ...next };
   }
@@ -97,8 +97,9 @@ export function bandMix(intervals: number[]): BandMix {
 
 type Tracked = { topic: Topic; skill: Skill };
 
-function tracked(doc: Doc, skillId?: string | null): Tracked[] {
-  return activeTopics(doc)
+/** What is being scheduled on `today` — finished seasons and paused subjects are not. */
+function tracked(doc: Doc, today: Day, skillId?: string | null): Tracked[] {
+  return activeTopics(doc, today)
     .filter((t) => !skillId || t.skill_id === skillId)
     .map((topic) => ({ topic, skill: skillById(doc, topic.skill_id)! }));
 }
@@ -120,7 +121,7 @@ export type Outlook = {
  * now, where the two lines start together.
  */
 export function outlook(doc: Doc, today: Day, points: number[], skillId?: string | null): Outlook[] {
-  const items = tracked(doc, skillId);
+  const items = tracked(doc, today, skillId);
   const until = addDays(today, Math.max(0, ...points));
   const sims = items.map(({ topic, skill }) => ({ topic, reviews: keepUp(topic, skill, today, until) }));
 
@@ -141,7 +142,7 @@ export function weeklyWorkload(doc: Doc, today: Day, weeks: number): { week: Day
   const first = weekStart(today);
   const out = Array.from({ length: weeks }, (_, i) => ({ week: addDays(first, i * 7), reviews: 0 }));
   const until = addDays(first, weeks * 7 - 1);
-  for (const { topic, skill } of tracked(doc)) {
+  for (const { topic, skill } of tracked(doc, today)) {
     for (const r of keepUp(topic, skill, today, until)) {
       const i = Math.floor(daysBetween(first, r.day) / 7);
       if (i >= 0 && i < weeks) out[i].reviews += 1;
@@ -184,7 +185,7 @@ export function summary(doc: Doc, today: Day): Summary {
     cursor = addDays(cursor, -1);
   }
 
-  const topics = activeTopics(doc);
+  const topics = activeTopics(doc, today);
   return {
     tracked: topics.length,
     reviews30: recent.length,
@@ -232,7 +233,7 @@ export type SkillProgress = {
 export function skillProgress(doc: Doc, today: Day, horizonDays: number): SkillProgress[] {
   const out: SkillProgress[] = [];
   for (const skill of doc.skills.filter((s) => !s.archived_at)) {
-    const items = tracked(doc, skill.id);
+    const items = tracked(doc, today, skill.id);
     if (!items.length) continue;
     const [later] = outlook(doc, today, [horizonDays], skill.id);
     out.push({
@@ -253,7 +254,7 @@ export type Attention = { topic: Topic; skill: Skill; recall: number; why: strin
  * slipped furthest. A short list on purpose — it is a nudge, not a backlog.
  */
 export function needsAttention(doc: Doc, today: Day, n: number): Attention[] {
-  return tracked(doc)
+  return tracked(doc, today)
     .map(({ topic, skill }) => {
       const r = recallOn(topic, today);
       const late = daysBetween(topic.due_on, today);

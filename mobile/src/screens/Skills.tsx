@@ -9,7 +9,7 @@ import { useStore } from '../store/store';
 import { bandColor, bandColors } from '../theme/colors';
 import { useTheme } from '../theme/theme';
 import { TOUCH, radius } from '../theme/tokens';
-import { Archive, Chevron, Pencil, Plus } from '../ui/icons';
+import { Chevron, Pencil, Plus } from '../ui/icons';
 import {
   Badge,
   Card,
@@ -27,6 +27,7 @@ import {
   Txt,
 } from '../ui/primitives';
 import { Screen, Sheet } from '../ui/shell';
+import { ArchivedTopics, EditSkillSheet, SkillContext, skillStatus, TopicDetail } from './skillParts';
 
 export function SkillsScreen() {
   const t = useTheme();
@@ -35,10 +36,9 @@ export function SkillsScreen() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
 
   const skills = doc.skills.filter((s) => !s.archived_at);
   const archived = doc.skills.filter((s) => s.archived_at);
@@ -81,24 +81,20 @@ export function SkillsScreen() {
             index={i}
             open={openId === skill.id}
             menuOpen={menuId === skill.id}
-            renaming={renamingId === skill.id}
-            draft={draft}
-            setDraft={setDraft}
             onToggle={() => {
               setOpenId((p) => (p === skill.id ? null : skill.id));
               setMenuId(null);
             }}
             onMenu={() => setMenuId((p) => (p === skill.id ? null : skill.id))}
-            onStartRename={() => {
-              setRenamingId(skill.id);
-              setDraft(skill.name);
+            onEdit={() => {
+              setEditingSkillId(skill.id);
               setMenuId(null);
             }}
-            onCommitRename={() => {
-              store.renameSkill(skill.id, draft || skill.name);
-              setRenamingId(null);
+            onTogglePause={() => {
+              if (skill.paused_at) store.resumeSkill(skill.id);
+              else store.pauseSkill(skill.id);
+              setMenuId(null);
             }}
-            onCancelRename={() => setRenamingId(null)}
             onArchive={() => {
               store.archiveSkill(skill.id);
               setMenuId(null);
@@ -161,6 +157,7 @@ export function SkillsScreen() {
       </Txt>
 
       <NewSkillSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <EditSkillSheet skill={doc.skills.find((x) => x.id === editingSkillId) ?? null} onClose={() => setEditingSkillId(null)} />
       <DeleteSkillSheet skillId={deletingId} onClose={() => setDeletingId(null)} />
     </Screen>
   );
@@ -266,78 +263,51 @@ function SkillCard({
   index,
   open,
   menuOpen,
-  renaming,
-  draft,
-  setDraft,
   onToggle,
   onMenu,
-  onStartRename,
-  onCommitRename,
-  onCancelRename,
+  onEdit,
   onArchive,
   onDelete,
+  onTogglePause,
 }: {
   skill: Skill;
   index: number;
   open: boolean;
   menuOpen: boolean;
-  renaming: boolean;
-  draft: string;
-  setDraft: (v: string) => void;
   onToggle: () => void;
   onMenu: () => void;
-  onStartRename: () => void;
-  onCommitRename: () => void;
-  onCancelRename: () => void;
+  onEdit: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  onTogglePause: () => void;
 }) {
   const t = useTheme();
   const store = useStore();
   const topics = store.doc.topics.filter((x) => !x.archived_at && x.skill_id === skill.id);
   const state = stateOf(topics);
   const tone = bandColors(state.tone, t.c);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [topicDraft, setTopicDraft] = useState('');
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const status = skillStatus(skill, store.day);
 
   return (
     <View>
       <Card style={{ position: 'relative' }}>
-        {renaming ? (
-          <Disclose>
-            <Row gap={8}>
-              <View style={{ flex: 1 }}>
-                <Field value={draft} onChangeText={setDraft} placeholder={skill.name} />
-              </View>
-              <Press
-                onPress={onCommitRename}
-                style={{ minHeight: 42, paddingHorizontal: 14, borderRadius: 10, backgroundColor: t.c.acc, justifyContent: 'center' }}
-              >
-                <Txt v="secondary" c={t.c.accFg} style={{ fontWeight: '600' }}>
-                  Save
-                </Txt>
-              </Press>
-              <TextButton label="Cancel" onPress={onCancelRename} style={{ paddingHorizontal: 4 }} />
-            </Row>
-          </Disclose>
-        ) : (
-          <Row gap={9}>
-            <Dot color={t.hue(skill.hue_index)} />
-            <Txt v="cardTitle" style={{ flex: 1 }} numberOfLines={1}>
-              {skill.name}
-            </Txt>
-            <Badge text={badgeFor(skill)} />
-            <Press
-              onPress={onMenu}
-              accessibilityLabel={`More for ${skill.name}`}
-              style={{ width: 30, height: 30, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 2.5 }}
-            >
-              <Dot color={t.c.fnt} size={3.5} />
-              <Dot color={t.c.fnt} size={3.5} />
-              <Dot color={t.c.fnt} size={3.5} />
-            </Press>
-          </Row>
-        )}
+        <Row gap={9}>
+          <Dot color={t.hue(skill.hue_index)} />
+          <Txt v="cardTitle" style={{ flex: 1 }} numberOfLines={1}>
+            {skill.name}
+          </Txt>
+          <Badge text={badgeFor(skill)} />
+          <Press
+            onPress={onMenu}
+            accessibilityLabel={`More for ${skill.name}`}
+            style={{ width: 30, height: 30, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 2.5 }}
+          >
+            <Dot color={t.c.fnt} size={3.5} />
+            <Dot color={t.c.fnt} size={3.5} />
+            <Dot color={t.c.fnt} size={3.5} />
+          </Press>
+        </Row>
 
         {menuOpen ? (
           <Disclose
@@ -355,10 +325,17 @@ function SkillCard({
           >
             <Press
               scale={1}
-              onPress={onStartRename}
+              onPress={onEdit}
               style={{ minHeight: 40, borderRadius: 9, paddingHorizontal: 12, justifyContent: 'center' }}
             >
-              <Txt style={{ fontSize: 14 }}>Rename</Txt>
+              <Txt style={{ fontSize: 14 }}>Edit skill</Txt>
+            </Press>
+            <Press
+              scale={1}
+              onPress={onTogglePause}
+              style={{ minHeight: 40, borderRadius: 9, paddingHorizontal: 12, justifyContent: 'center' }}
+            >
+              <Txt style={{ fontSize: 14 }}>{skill.paused_at ? 'Resume' : 'Pause'}</Txt>
             </Press>
             <Press
               scale={1}
@@ -382,6 +359,19 @@ function SkillCard({
         <Txt v="secondary" c={t.c.mut} style={{ marginTop: 9, lineHeight: 19 }}>
           {methodFor(skill.genre, skill.physical_kind)}
         </Txt>
+        {status.text || status.badge ? (
+          <Row gap={8} style={{ marginTop: 6 }}>
+            {status.badge ? <Badge text={status.badge} fg={t.c.amb} bg={t.c.ambT} /> : null}
+            <Txt v="secondary" c={t.c.fnt} style={{ flex: 1 }} numberOfLines={1}>
+              {status.text}
+            </Txt>
+          </Row>
+        ) : null}
+        {skill.paused_at ? (
+          <Txt v="secondary" c={t.c.fnt} style={{ marginTop: 4, lineHeight: 18 }}>
+            Nothing from this skill is scheduled while it is paused. Resume from the menu.
+          </Txt>
+        ) : null}
 
         <Press
           scale={1}
@@ -414,64 +404,40 @@ function SkillCard({
             {topics.map((topic) => {
               const band = bandFor(topic.interval_days);
               const color = bandColor(band, t.c);
-              const editing = editingId === topic.id;
+              const opened = detailId === topic.id;
               return (
                 <View key={topic.id} style={{ paddingVertical: 11, borderTopWidth: 1, borderTopColor: t.c.line }}>
-                  {editing ? (
-                    <Disclose>
-                      <Row gap={8}>
-                        <View style={{ flex: 1 }}>
-                          <Field value={topicDraft} onChangeText={setTopicDraft} placeholder={topic.title} />
-                        </View>
-                        <Press
-                          onPress={() => {
-                            store.editTopic(topic.id, topicDraft || topic.title);
-                            setEditingId(null);
-                          }}
-                          style={{ minHeight: 40, paddingHorizontal: 13, borderRadius: 10, backgroundColor: t.c.acc, justifyContent: 'center' }}
-                        >
-                          <Txt v="secondary" c={t.c.accFg} style={{ fontWeight: '600' }}>
-                            Save
-                          </Txt>
-                        </Press>
-                        <TextButton label="Cancel" onPress={() => setEditingId(null)} style={{ paddingHorizontal: 2 }} />
-                      </Row>
-                    </Disclose>
-                  ) : (
-                    <Row gap={10}>
-                      <View style={{ flex: 1 }}>
-                        <Txt style={{ fontSize: 14 }} numberOfLines={1}>
-                          {topic.title}
+                  <Press
+                    scale={1}
+                    onPress={() => setDetailId(opened ? null : topic.id)}
+                    accessibilityState={{ expanded: opened }}
+                    accessibilityLabel={`${topic.title}, ${band.label}. ${opened ? 'Close' : 'Open'} details`}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Txt style={{ fontSize: 14, fontWeight: opened ? '600' : '400' }} numberOfLines={1}>
+                        {topic.title}
+                      </Txt>
+                      <Row gap={7} style={{ marginTop: 5 }}>
+                        <Pips pips={pipsFor(band)} color={color} />
+                        <Txt v="label" c={color} style={{ textTransform: 'none', letterSpacing: 0 }}>
+                          {band.label}
                         </Txt>
-                        <Row gap={7} style={{ marginTop: 5 }}>
-                          <Pips pips={pipsFor(band)} color={color} />
-                          <Txt v="label" c={color} style={{ textTransform: 'none', letterSpacing: 0 }}>
-                            {band.label}
+                        <Txt v="label" c={t.c.fnt} style={{ textTransform: 'none', letterSpacing: 0, fontWeight: '400' }}>
+                          {gapLabel(topic.interval_days)}
+                        </Txt>
+                        {topic.sub_skill ? (
+                          <Txt v="label" c={t.c.fnt} style={{ textTransform: 'none', letterSpacing: 0, fontWeight: '400', flex: 1 }} numberOfLines={1}>
+                            {`· ${topic.sub_skill}`}
                           </Txt>
-                          <Txt v="label" c={t.c.fnt} style={{ textTransform: 'none', letterSpacing: 0, fontWeight: '400' }}>
-                            {gapLabel(topic.interval_days)}
-                          </Txt>
-                        </Row>
-                      </View>
-                      <Press
-                        onPress={() => {
-                          setEditingId(topic.id);
-                          setTopicDraft(topic.title);
-                        }}
-                        accessibilityLabel={`Rename ${topic.title}`}
-                        style={{ width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: t.c.sunk }}
-                      >
-                        <Pencil color={t.c.mut} />
-                      </Press>
-                      <Press
-                        onPress={() => store.archiveTopic(topic.id)}
-                        accessibilityLabel={`Archive ${topic.title}`}
-                        style={{ width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: t.c.redT }}
-                      >
-                        <Archive color={t.c.red} />
-                      </Press>
-                    </Row>
-                  )}
+                        ) : null}
+                      </Row>
+                    </View>
+                    <View style={{ width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: t.c.sunk }}>
+                      {opened ? <Chevron open color={t.c.mut} /> : <Pencil color={t.c.mut} />}
+                    </View>
+                  </Press>
+                  {opened ? <TopicDetail topic={topic} skill={skill} onDone={() => setDetailId(null)} /> : null}
                 </View>
               );
             })}
@@ -482,6 +448,7 @@ function SkillCard({
                 </Txt>
               </View>
             ) : null}
+            <ArchivedTopics skill={skill} />
           </Disclose>
         ) : null}
       </Card>
@@ -497,6 +464,9 @@ export function NewSkillSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [name, setName] = useState('');
   const [override, setOverride] = useState<Genre | null>(null);
   const [kind, setKind] = useState<PhysicalKind>('closed');
+  const [level, setLevel] = useState('');
+  const [target, setTarget] = useState<string | null>(null);
+  const [calibration, setCalibration] = useState(1);
 
   const detection = useMemo(() => detectGenre(name), [name]);
   const genre = override ?? detection.genre;
@@ -507,6 +477,9 @@ export function NewSkillSheet({ open, onClose }: { open: boolean; onClose: () =>
     setName('');
     setOverride(null);
     setKind('closed');
+    setLevel('');
+    setTarget(null);
+    setCalibration(1);
   };
 
   return (
@@ -581,12 +554,29 @@ export function NewSkillSheet({ open, onClose }: { open: boolean; onClose: () =>
         </Row>
       </View>
 
+      <SkillContext
+        genre={genre}
+        level={level}
+        onLevel={setLevel}
+        target={target}
+        onTarget={setTarget}
+        calibration={calibration}
+        onCalibration={setCalibration}
+      />
+
       <PrimaryButton
         label={name.trim() ? `Add ${name.trim()}` : 'Add skill'}
         disabled={!name.trim()}
         style={{ marginTop: 20 }}
         onPress={() => {
-          store.createSkill({ name, genre, physical_kind: genre === 'physical' ? kind : null });
+          store.createSkill({
+            name,
+            genre,
+            physical_kind: genre === 'physical' ? kind : null,
+            level,
+            target_date: target,
+            calibration,
+          });
           reset();
           onClose();
         }}

@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { Day, today } from '../engine/dates';
+import { Day, parseDay, today } from '../engine/dates';
 import { Genre, PhysicalKind } from '../engine/genres';
 import { buildPlan, Plan, redistribute } from '../engine/plan';
 import { applyLog, applyRating, newTopicDefaults } from '../engine/schedule';
@@ -29,7 +29,21 @@ export type LogInput = {
   feltShaky: boolean;
   studiedOn: Day;
   confusableWith?: string[];
+  /** For a card. Optional on every genre. */
+  cue?: string | null;
+  answer?: string | null;
+  /** Required for a new memorization fact — see `needsEncoding`. */
+  encoding?: string | null;
 };
+
+/** What a rating did, for the screen to respond to. */
+export type RateResult = { weakened: boolean; plateau: boolean; interval: number } | null;
+
+/** The parts of a skill that can be changed after it is made. */
+export type SkillEdit = Partial<Pick<Skill, 'name' | 'level' | 'target_date' | 'calibration' | 'genre' | 'physical_kind'>>;
+
+/** The parts of a topic that can be edited by hand. */
+export type TopicEdit = Partial<Pick<Topic, 'title' | 'sub_skill' | 'cue' | 'answer' | 'encoding'>>;
 
 export type Store = {
   ready: boolean;
@@ -48,9 +62,20 @@ export type Store = {
   plan: Plan;
   undoable: UndoEntry | null;
 
-  createSkill: (input: { name: string; genre: Genre; physical_kind: PhysicalKind | null }) => Skill;
+  createSkill: (input: {
+    name: string;
+    genre: Genre;
+    physical_kind: PhysicalKind | null;
+    level?: string | null;
+    target_date?: Day | null;
+    calibration?: number;
+  }) => Skill;
   renameSkill: (id: string, name: string) => void;
   setSkillGenre: (id: string, genre: Genre, kind: PhysicalKind | null) => void;
+  /** Setting a new target date starts a new season, and so clears any pause. */
+  updateSkill: (id: string, edit: SkillEdit) => void;
+  pauseSkill: (id: string) => void;
+  resumeSkill: (id: string) => void;
   archiveSkill: (id: string) => void;
   restoreSkill: (id: string) => void;
   /** What a delete would take with it, for the confirmation to state. */
@@ -59,11 +84,15 @@ export type Store = {
   deleteSkill: (id: string) => Promise<void>;
 
   logStudy: (input: LogInput) => Topic;
+  /** A pasted syllabus: one new topic per title, already-tracked titles skipped. Returns how many were added. */
+  logMany: (skillId: string, titles: string[], studiedOn: Day) => number;
   editTopic: (id: string, title: string) => void;
+  updateTopic: (id: string, edit: TopicEdit) => void;
   archiveTopic: (id: string) => void;
   restoreTopic: (id: string) => void;
 
-  rate: (topicId: string, rating: Rating) => void;
+  /** `on` defaults to today; a past day is recorded against that day. */
+  rate: (topicId: string, rating: Rating, on?: Day) => RateResult;
   undo: () => void;
   dismissUndo: () => void;
   redistributeToday: () => number;
@@ -249,7 +278,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const createSkill: Store['createSkill'] = useCallback(
-    ({ name, genre, physical_kind }) => {
+    ({ name, genre, physical_kind, level, target_date, calibration }) => {
       const at = nowIso();
       const skill: Skill = {
         id: uid(),
@@ -257,6 +286,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         genre,
         physical_kind,
         hue_index: nextHue(live.current.skills),
+        level: level?.trim() || null,
+        target_date: target_date ?? null,
+        calibration: calibration ?? 1,
+        paused_at: null,
         archived_at: null,
         created_at: at,
         updated_at: at,
@@ -269,26 +302,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logStudy: Store['logStudy'] = useCallback(
-    ({ skillId, topicId, title, subSkill, feltShaky, studiedOn, confusableWith }) => {
+    ({ skillId, topicId, title, subSkill, feltShaky, studiedOn, confusableWith, cue, answer, encoding }) => {
       const at = nowIso();
       const skill = live.current.skills.find((s) => s.id === skillId)!;
       const existing = topicId ? live.current.topics.find((t) => t.id === topicId) : undefined;
 
       let topic: Topic;
       if (existing) {
-        const { interval_days, due_on } = applyLog(existing, skill.genre, studiedOn, feltShaky);
-        topic = { ...existing, interval_days, due_on, sub_skill: keptSubSkill(subSkill, existing.sub_skill), updated_at: at };
+        const { interval_days, due_on } = applyLog(existing, skill.genre, studiedOn, feltShaky, skill.calibration);
+        topic = {
+          ...existing,
+          interval_days,
+          due_on,
+          sub_skill: keptSubSkill(subSkill, existing.sub_skill),
+          cue: keptSubSkill(cue, existing.cue),
+          answer: keptSubSkill(answer, existing.answer),
+          encoding: keptSubSkill(encoding, existing.encoding),
+          updated_at: at,
+        };
       } else {
         topic = {
           id: uid(),
           skill_id: skillId,
           title: title.trim(),
           sub_skill: subSkill?.trim() || null,
+          cue: cue?.trim() || null,
+          answer: answer?.trim() || null,
+          encoding: encoding?.trim() || null,
           last_reviewed_at: null,
           archived_at: null,
           created_at: at,
           updated_at: at,
-          ...newTopicDefaults(skill.genre, feltShaky, studiedOn),
+          ...newTopicDefaults(skill.genre, feltShaky, studiedOn, skill.calibration),
         };
       }
 
@@ -335,13 +380,70 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [commit, persist],
   );
 
-  const rate: Store['rate'] = useCallback(
-    (topicId, rating) => {
-      const before = live.current.topics.find((t) => t.id === topicId);
-      if (!before) return;
-      const skill = live.current.skills.find((s) => s.id === before.skill_id)!;
-      const outcome = applyRating(before, skill.genre, rating, day);
+  const logMany: Store['logMany'] = useCallback(
+    (skillId, titles, studiedOn) => {
+      const skill = live.current.skills.find((s) => s.id === skillId);
+      if (!skill) return 0;
       const at = nowIso();
+      const known = new Set(
+        live.current.topics.filter((t) => t.skill_id === skillId && !t.archived_at).map((t) => t.title.trim().toLowerCase()),
+      );
+      const topics: Topic[] = [];
+      const entries: LogEntry[] = [];
+      for (const raw of titles) {
+        const title = raw.trim();
+        if (!title || known.has(title.toLowerCase())) continue;
+        known.add(title.toLowerCase());
+        const topic: Topic = {
+          id: uid(),
+          skill_id: skillId,
+          title,
+          sub_skill: null,
+          cue: null,
+          answer: null,
+          encoding: null,
+          last_reviewed_at: null,
+          archived_at: null,
+          created_at: at,
+          updated_at: at,
+          ...newTopicDefaults(skill.genre, false, studiedOn, skill.calibration),
+        };
+        topics.push(topic);
+        entries.push({
+          id: uid(),
+          skill_id: skillId,
+          topic_id: topic.id,
+          sub_skill: null,
+          studied_on: studiedOn,
+          flags: ['from a pasted list'],
+          created_at: at,
+          updated_at: at,
+        });
+      }
+      if (!topics.length) return 0;
+      commit({
+        ...live.current,
+        topics: [...live.current.topics, ...topics],
+        log_entries: [...live.current.log_entries, ...entries],
+      });
+      persist('topics', topics);
+      persist('log_entries', entries);
+      return topics.length;
+    },
+    [commit, persist],
+  );
+
+  const rate: Store['rate'] = useCallback(
+    (topicId, rating, on) => {
+      const before = live.current.topics.find((t) => t.id === topicId);
+      if (!before) return null;
+      const skill = live.current.skills.find((s) => s.id === before.skill_id)!;
+      const when = on ?? day;
+      const outcome = applyRating(before, skill.genre, rating, when, skill.calibration);
+      const at = nowIso();
+      // A rating made for an earlier day is recorded on that day, at midday so
+      // it lands on the same local date wherever it is read.
+      const ratedAt = when === day ? at : parseDay(when).toISOString();
 
       const after: Topic = {
         ...before,
@@ -353,7 +455,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         format_rung: outcome.format_rung,
         state: outcome.state,
         due_on: outcome.due_on,
-        last_reviewed_at: at,
+        last_reviewed_at: ratedAt,
         updated_at: at,
       };
 
@@ -362,7 +464,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         topic_id: topicId,
         rating,
         felt_shaky: false,
-        rated_at: at,
+        rated_at: ratedAt,
         prev_interval: before.interval_days,
         next_interval: outcome.interval_days,
         updated_at: at,
@@ -382,6 +484,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         rating,
         nextInterval: rating === 'pushed' ? 1 : outcome.interval_days,
       });
+      return { weakened: outcome.weakened, plateau: outcome.plateau, interval: outcome.interval_days };
     },
     [commit, day, persist],
   );
@@ -470,6 +573,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createSkill,
       renameSkill: (id, name) => patchSkill(id, { name: name.trim() }),
       setSkillGenre: (id, genre, kind) => patchSkill(id, { genre, physical_kind: kind }),
+      updateSkill: (id, edit) => {
+        const patch: Partial<Skill> = { ...edit };
+        if (edit.name !== undefined) patch.name = edit.name.trim() || live.current.skills.find((s) => s.id === id)?.name;
+        if (edit.level !== undefined) patch.level = edit.level?.trim() || null;
+        if (edit.genre && edit.genre !== 'physical') patch.physical_kind = null;
+        if (edit.genre === 'physical' && edit.physical_kind === undefined) patch.physical_kind = 'closed';
+        if (edit.target_date) patch.paused_at = null;
+        patchSkill(id, patch);
+      },
+      pauseSkill: (id) => patchSkill(id, { paused_at: nowIso() }),
+      resumeSkill: (id) => patchSkill(id, { paused_at: null }),
       archiveSkill: (id) => patchSkill(id, { archived_at: nowIso() }),
       restoreSkill: (id) => patchSkill(id, { archived_at: null }),
 
@@ -511,6 +625,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       logStudy,
       editTopic: (id, title) => patchTopic(id, { title: title.trim() }),
+      updateTopic: (id, edit) => {
+        const clean: Partial<Topic> = {};
+        for (const [k, v] of Object.entries(edit) as [keyof TopicEdit, string | null | undefined][]) {
+          if (v === undefined) continue;
+          if (k === 'title') {
+            if (v?.trim()) clean.title = v.trim();
+          } else {
+            clean[k] = v?.trim() || null;
+          }
+        }
+        patchTopic(id, clean);
+      },
+      logMany,
       archiveTopic: (id) => patchTopic(id, { archived_at: nowIso() }),
       restoreTopic: (id) => patchTopic(id, { archived_at: null }),
       rate,
@@ -549,7 +676,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
     };
   }, [
-    applyRemote, createSkill, day, doc, loadError, loadFailed, logStudy, patchSkill, patchTopic, rate, ready,
+    applyRemote, createSkill, day, doc, loadError, loadFailed, logMany, logStudy, patchSkill, patchTopic, rate, ready,
     redistributeToday, replaceDoc, revision, saveError, undo, undoable, updateSettings, commit,
   ]);
 

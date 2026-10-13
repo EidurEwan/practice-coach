@@ -14,6 +14,10 @@ CREATE TABLE IF NOT EXISTS skills (
   genre TEXT NOT NULL,
   physical_kind TEXT,
   hue_index INTEGER NOT NULL DEFAULT 0,
+  level TEXT,
+  target_date TEXT,
+  calibration REAL NOT NULL DEFAULT 1,
+  paused_at TEXT,
   archived_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -24,6 +28,9 @@ CREATE TABLE IF NOT EXISTS topics (
   skill_id TEXT NOT NULL,
   title TEXT NOT NULL,
   sub_skill TEXT,
+  cue TEXT,
+  answer TEXT,
+  encoding TEXT,
   state TEXT NOT NULL,
   interval_days REAL NOT NULL,
   ease REAL NOT NULL,
@@ -78,9 +85,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
 `;
 
 const COLUMNS: Record<CollectionName, string[]> = {
-  skills: ['id', 'name', 'genre', 'physical_kind', 'hue_index', 'archived_at', 'created_at', 'updated_at'],
+  skills: [
+    'id', 'name', 'genre', 'physical_kind', 'hue_index', 'level', 'target_date', 'calibration', 'paused_at',
+    'archived_at', 'created_at', 'updated_at',
+  ],
   topics: [
-    'id', 'skill_id', 'title', 'sub_skill', 'state', 'interval_days', 'ease', 'repetition',
+    'id', 'skill_id', 'title', 'sub_skill', 'cue', 'answer', 'encoding', 'state', 'interval_days', 'ease', 'repetition',
     'streak', 'penalty', 'format_rung', 'due_on', 'last_reviewed_at', 'archived_at', 'created_at', 'updated_at',
   ],
   reviews: ['id', 'topic_id', 'rating', 'felt_shaky', 'rated_at', 'prev_interval', 'next_interval', 'updated_at'],
@@ -102,11 +112,14 @@ const COLUMNS: Record<CollectionName, string[]> = {
 const COLUMN_DDL: Record<CollectionName, Record<string, string>> = {
   skills: {
     id: 'TEXT', name: 'TEXT', genre: 'TEXT', physical_kind: 'TEXT',
-    hue_index: 'INTEGER NOT NULL DEFAULT 0', archived_at: 'TEXT',
+    hue_index: 'INTEGER NOT NULL DEFAULT 0',
+    level: 'TEXT', target_date: 'TEXT', calibration: 'REAL NOT NULL DEFAULT 1', paused_at: 'TEXT',
+    archived_at: 'TEXT',
     created_at: 'TEXT', updated_at: 'TEXT',
   },
   topics: {
     id: 'TEXT', skill_id: 'TEXT', title: 'TEXT', sub_skill: 'TEXT',
+    cue: 'TEXT', answer: 'TEXT', encoding: 'TEXT',
     state: "TEXT NOT NULL DEFAULT 'new'",
     interval_days: 'REAL NOT NULL DEFAULT 1',
     ease: 'REAL NOT NULL DEFAULT 2.5',
