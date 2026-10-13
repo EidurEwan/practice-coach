@@ -1,17 +1,13 @@
 /**
  * Whether accounts are offered at all.
  *
- * The sign-in and sign-up flows are built and tested, but the project behind
- * them cannot serve them yet — its schema is not applied and it cannot send a
- * confirmation email, so every attempt ends in a 500 the person can do nothing
- * about. Offering a door that does not open is worse than saying it is not
- * ready, so the entrances are replaced with a note and the screens behind them
- * are left intact.
- *
- * Flip this to `true` once `scripts/check-supabase.mjs` reports green; nothing
- * else needs changing.
+ * Off, the sign-in and sign-up entrances are replaced with a note and the
+ * screens behind them are left intact — the right state for a build whose
+ * project cannot serve accounts (no schema, or no way to send the
+ * confirmation email), since a door that does not open is worse than one
+ * marked "soon". `scripts/check-supabase.mjs` says whether the project can.
  */
-export const ACCOUNTS_ENABLED = false;
+export const ACCOUNTS_ENABLED = true;
 
 /** What to say where an account action used to be. */
 export const ACCOUNTS_SOON = 'Accounts are coming soon';
