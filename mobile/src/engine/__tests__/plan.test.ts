@@ -1,4 +1,4 @@
-import { addDays } from '../dates';
+import { addDays, weekStart } from '../dates';
 import { buildAgenda, buildPlan, HORIZONS, redistribute } from '../plan';
 import { projectedDates } from '../schedule';
 import { doc, skill, topic } from './factory';
@@ -237,32 +237,59 @@ describe('the agenda', () => {
 
   test('only the next review is committed; the rest are marked projected', () => {
     const groups = buildAgenda(d, DAY, '2w', null, projectedDates);
-    const rows = groups.flatMap((g) => g.rows);
-    expect(rows[0].chip).toBe('next');
+    const rows = groups.flatMap((g) => g.items);
+    expect(rows[0].index).toBe(0);
     expect(rows[0].committed).toBe(true);
     expect(rows.slice(1).every((r) => !r.committed)).toBe(true);
-    expect(rows[1]?.chip).toBe('2nd');
+    expect(rows[1]?.index).toBe(1);
+  });
+
+  test('projections can be left out, leaving only what is committed', () => {
+    const rows = buildAgenda(d, DAY, '1y', null, projectedDates, false).flatMap((g) => g.items);
+    expect(rows.length).toBe(1);
+    expect(rows[0].committed).toBe(true);
+  });
+
+  test('an overdue topic projects its later reviews from today, not from the missed date', () => {
+    // Twenty days late on a 10-day gap: projecting from the missed date put
+    // the next review ten days in the past, where it vanished.
+    const late = topic({ id: 'late', skill_id: maths.id, interval_days: 10, repetition: 3, due_on: addDays(DAY, -20) });
+    const rows = buildAgenda({ ...base, topics: [late] }, DAY, '3m', null, projectedDates).flatMap((g) => g.items);
+    expect(rows[0].day).toBe(DAY);
+    expect(rows[0].daysLate).toBe(20);
+    expect(rows[1].day).toBe(addDays(DAY, 22));
+  });
+
+  test('long horizons tally by skill, and flag days over capacity', () => {
+    const many = Array.from({ length: 10 }, (_, i) =>
+      topic({ id: `m${i}`, skill_id: maths.id, due_on: addDays(DAY, 3) }),
+    );
+    const groups = buildAgenda({ ...base, topics: many }, DAY, '1y', null, projectedDates, false);
+    expect(groups[0].bySkill[0]).toMatchObject({ total: 10, committed: 10 });
+    expect(groups[0].overCapacity).toBe(1);
   });
 
   test('overdue work is shown against today, marked overdue', () => {
     const late = topic({ id: 'late', skill_id: maths.id, due_on: addDays(DAY, -4) });
     const groups = buildAgenda({ ...base, topics: [late] }, DAY, '2w', null, projectedDates);
     expect(groups[0].key).toBe(DAY);
-    expect(groups[0].rows[0].chip).toBe('overdue');
+    expect(groups[0].items[0].overdue).toBe(true);
   });
 
   test('the skill filter narrows the whole tab', () => {
     const other = topic({ id: 'o', skill_id: 'chem', due_on: addDays(DAY, 1) });
     const both = { ...d, topics: [t, other] };
     const filtered = buildAgenda(both, DAY, '2w', 'chem', projectedDates);
-    expect(filtered.flatMap((g) => g.rows).every((r) => r.skill.id === 'chem')).toBe(true);
+    expect(filtered.flatMap((g) => g.items).every((r) => r.skill.id === 'chem')).toBe(true);
   });
 
   test('widening the horizon rolls days into months and years', () => {
     expect(HORIZONS.map((h) => h.key)).toEqual(['2w', '3m', '1y', '5y']);
     expect(buildAgenda(d, DAY, '2w', null, projectedDates)[0].key).toHaveLength(10);
-    expect(buildAgenda(d, DAY, '1y', null, projectedDates)[0].key).toHaveLength(7);
-    expect(buildAgenda(d, DAY, '5y', null, projectedDates)[0].key).toHaveLength(4);
+    const weekly = buildAgenda(d, DAY, '3m', null, projectedDates)[0];
+    expect(weekly.key).toBe(weekStart(weekly.items[0].day));
+    expect(buildAgenda(d, DAY, '1y', null, projectedDates)[0].key).toMatch(/^\d{4}-\d{2}-01$/);
+    expect(buildAgenda(d, DAY, '5y', null, projectedDates)[0].key).toMatch(/^\d{4}-01-01$/);
   });
 
   test('nothing past the horizon is listed', () => {

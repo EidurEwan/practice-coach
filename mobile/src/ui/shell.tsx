@@ -16,7 +16,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { Route, TABS, useNav } from '../nav/router';
 import { useTheme } from '../theme/theme';
 import { motion, NATIVE_DRIVER, radius, space, TOUCH, type } from '../theme/tokens';
-import { Back, Plus, SettingsGlyph, SkillsGlyph, TodayGlyph, UpcomingGlyph } from './icons';
+import { Back, Plus, SettingsGlyph, SkillsGlyph, TodayGlyph, ProgressGlyph, UpcomingGlyph } from './icons';
 import { Press, Txt } from './primitives';
 
 const LOGO = require('../../assets/IntervalLogo.png');
@@ -150,6 +150,7 @@ export function Wash() {
 const TAB_META = [
   { key: 'today' as const, label: 'Today', Icon: TodayGlyph },
   { key: 'upcoming' as const, label: 'Upcoming', Icon: UpcomingGlyph },
+  { key: 'progress' as const, label: 'Progress', Icon: ProgressGlyph },
   { key: 'skills' as const, label: 'Skills', Icon: SkillsGlyph },
 ];
 
@@ -170,7 +171,7 @@ export function TabBar({ dueCount }: { dueCount: number }) {
     }).start();
   }, [index, slide, t.reduceMotion]);
 
-  const cell = barWidth ? (barWidth - 12) / 3 : 0;
+  const cell = barWidth ? (barWidth - 12) / TAB_META.length : 0;
 
   return (
     <View

@@ -13,6 +13,7 @@ import { SettingsScreen } from './screens/Settings';
 import { SkillsScreen } from './screens/Skills';
 import { TodayScreen } from './screens/Today';
 import { UpcomingScreen } from './screens/Upcoming';
+import { ProgressScreen } from './screens/Progress';
 import { StoreProvider, useStore } from './store/store';
 import { AuthProvider } from './sync/auth';
 import { RATING_LABEL } from './theme/colors';
@@ -144,6 +145,7 @@ function Routes() {
       <View style={{ flex: 1 }} key={nav.key}>
         {route.name === 'today' ? <TodayScreen /> : null}
         {route.name === 'upcoming' ? <UpcomingScreen /> : null}
+        {route.name === 'progress' ? <ProgressScreen /> : null}
         {route.name === 'skills' ? <SkillsScreen /> : null}
         {route.name === 'log' ? <LogScreen /> : null}
         {route.name === 'settings' ? <SettingsScreen /> : null}

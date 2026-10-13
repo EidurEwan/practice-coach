@@ -92,6 +92,15 @@ export function UpcomingGlyph({ size = 20, color }: IconProps) {
   );
 }
 
+export function ProgressGlyph({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path d="M3 14.6l4.3-4.6 3.3 2.9L16.4 6.4" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M3 17h14" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 export function SkillsGlyph({ size = 20, color }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">

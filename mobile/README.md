@@ -6,7 +6,7 @@ offline-first, with Supabase as a backup and merge target rather than a gate.
 ```bash
 npm install
 npm start          # then i / a / w
-npm test           # 184 tests — engine, sync, nav, persistence, reminders
+npm test           # 216 tests — engine, analytics, sync, nav, persistence, reminders
 npm run typecheck
 ```
 
@@ -23,11 +23,12 @@ src/engine/     the scheduler — pure TypeScript, no React, no I/O
   bands.ts        proficiency bands read off the current interval
   recall.ts       chart geometry — the sawtooth and the onboarding curves
   plan.ts         the day: ranking, capacity, backlog, interleaving, agenda
+  analytics.ts    Progress: estimated recall, the two futures, workload, streaks
 src/store/      local-first persistence (SQLite on device, JSON elsewhere)
 src/sync/       sync rules, engine and transport; Supabase client and auth
 src/theme/      the handoff's tokens, and light/dark/system
 src/ui/         primitives, icons, charts, and the app shell
-src/screens/    Today, Log, Upcoming, Skills, Settings, Onboarding, Account
+src/screens/    Today, Log, Upcoming, Progress, Skills, Settings, Onboarding, Account
 supabase/       migrations (schema, RLS, sync_push, account deletion) and verify/
 ```
 
@@ -49,6 +50,28 @@ persistence on every mutation. The phone is the source of truth:
 Every row carries `updated_at`, because the sync rule shown in the UI is
 *merges by timestamp, latest wins*, applied per row rather than per document.
 Two devices that were both offline keep everything either of them did.
+
+## Upcoming and Progress
+
+**Upcoming** opens on a strip of the next fourteen days — scheduled reviews,
+projected ones stacked above in a lighter step, and the daily capacity as a
+line — so a heavy day shows before it arrives. Below it, the agenda changes
+shape with the window: named reviews per day, grouped by skill, for two
+weeks; per week for three months; counted per skill for a year or five, on
+one scale so months compare honestly. Overdue work gets its own card, and
+everything projected after it starts from today. Projections can be hidden.
+
+**Progress** estimates how much is sticking. Nothing is measured — the app
+never quizzes — so it reads recall off the forgetting curve the schedule is
+built on: each gap is chosen to land at about 90% recall, so a topic's gap
+sets how fast it fades (`src/engine/analytics.ts`). From that it shows recall
+today; two futures, keeping up with reviews or stopping today; proficiency
+bands now and at a chosen horizon; what keeping up costs per week; activity,
+ratings and streaks; and the few topics most worth a look. The "keep up"
+future runs the real rating function, so it cannot disagree with the buttons.
+
+Chart colours live in `src/theme/viz.ts`, each set validated for contrast and
+colour-blind separation against both themes' surfaces.
 
 ## How sync works
 

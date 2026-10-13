@@ -1,4 +1,4 @@
-import { addDays, daysBetween, Day, lateWords } from './dates';
+import { addDays, daysBetween, Day, lateWords, weekStart } from './dates';
 import {
   curveFor,
   FORMAT_LADDER,
@@ -103,7 +103,7 @@ export function methodLine(skill: Skill, topic: Topic, flags: Flag[], partner: T
   return methodFor(skill.genre, skill.physical_kind);
 }
 
-function ordinal(n: number): string {
+export function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
@@ -322,64 +322,145 @@ export const HORIZONS: { key: Horizon; label: string; days: number }[] = [
   { key: '5y', label: '5 years', days: 1826 },
 ];
 
-export type AgendaRow = {
+/** One review on one day — the committed next one, or one projected after it. */
+export type Occurrence = {
   key: string;
-  title: string;
+  topic: Topic;
   skill: Skill;
-  /** "next" is committed. Anything else is projected on an unbroken run of OKs. */
-  chip: string;
+  day: Day;
+  /** 0 is the committed review; 1, 2, … are projected on unbroken OKs. */
+  index: number;
   committed: boolean;
   overdue: boolean;
+  daysLate: number;
 };
 
-export type AgendaGroup = { key: string; title: string; count: string; rows: AgendaRow[] };
-
-function bucketKey(day: Day, horizon: Horizon): string {
-  if (horizon === '2w') return day;
-  if (horizon === '3m') return day.slice(0, 7);
-  if (horizon === '1y') return day.slice(0, 7);
-  return day.slice(0, 4);
-}
+type Projector = (topic: Topic, genre: Genre, count: number) => { day: Day; index: number }[];
 
 /**
- * Only each topic's *next* review is real. Everything past it assumes an
- * unbroken run of OK ratings, and is marked as such wherever it appears.
+ * Every review between `day` and `until`, in date order.
+ *
+ * Overdue work counts as today — that is when it will actually be done — and
+ * everything projected after it follows from today too. Projecting from the
+ * missed date instead put the follow-up reviews in the past, where they were
+ * dropped, so anyone behind saw a lighter future than they really had.
  */
+export function occurrences(
+  doc: Doc,
+  day: Day,
+  until: Day,
+  opts: { skill?: string | null; projected?: boolean },
+  project: Projector,
+): Occurrence[] {
+  const out: Occurrence[] = [];
+  for (const topic of activeTopics(doc)) {
+    const skill = skillById(doc, topic.skill_id)!;
+    if (opts.skill && skill.id !== opts.skill) continue;
+
+    const daysLate = Math.max(0, daysBetween(topic.due_on, day));
+    const anchored = daysLate > 0 ? { ...topic, due_on: day } : topic;
+    const count = opts.projected === false ? 1 : 40;
+
+    for (const { day: on, index } of project(anchored, skill.genre, count)) {
+      if (on > until) break;
+      out.push({
+        key: `${topic.id}-${index}`,
+        topic,
+        skill,
+        day: on,
+        index,
+        committed: index === 0,
+        overdue: index === 0 && daysLate > 0,
+        daysLate: index === 0 ? daysLate : 0,
+      });
+    }
+  }
+  return out.sort((a, b) =>
+    a.day !== b.day
+      ? a.day < b.day ? -1 : 1
+      : a.overdue !== b.overdue
+        ? a.overdue ? -1 : 1
+        : a.skill.name.localeCompare(b.skill.name) || a.topic.title.localeCompare(b.topic.title),
+  );
+}
+
+/** How a window of the agenda is bucketed: days, then weeks, months, years. */
+export function bucketOf(day: Day, horizon: Horizon): Day {
+  if (horizon === '2w') return day;
+  if (horizon === '3m') return weekStart(day);
+  if (horizon === '1y') return `${day.slice(0, 7)}-01`;
+  return `${day.slice(0, 4)}-01-01`;
+}
+
+export type SkillTally = { skill: Skill; total: number; committed: number };
+
+export type AgendaGroup = {
+  /** The first day of the bucket. */
+  key: string;
+  items: Occurrence[];
+  committed: number;
+  /** Per skill, in the skills' own order — what a long horizon shows instead of a list. */
+  bySkill: SkillTally[];
+  /** Days in this bucket that are over the daily capacity on committed work alone. */
+  overCapacity: number;
+};
+
 export function buildAgenda(
   doc: Doc,
   day: Day,
   horizon: Horizon,
   skillFilter: string | null,
-  projectedDates: (topic: Topic, genre: Genre, count: number) => { day: Day; index: number }[],
+  project: Projector,
+  projected = true,
 ): AgendaGroup[] {
-  const end = addDays(day, HORIZONS.find((h) => h.key === horizon)!.days);
+  const until = addDays(day, HORIZONS.find((h) => h.key === horizon)!.days);
   const groups = new Map<string, AgendaGroup>();
+  const perDay = new Map<Day, number>();
 
-  for (const topic of activeTopics(doc)) {
-    const skill = skillById(doc, topic.skill_id)!;
-    if (skillFilter && skill.id !== skillFilter) continue;
-
-    for (const { day: on, index } of projectedDates(topic, skill.genre, 14)) {
-      if (on > end) break;
-      const overdue = index === 0 && daysBetween(on, day) > 0;
-      const at = overdue ? day : on;
-      if (at < day) continue;
-      const key = bucketKey(at, horizon);
-      if (!groups.has(key)) groups.set(key, { key, title: '', count: '', rows: [] });
-      groups.get(key)!.rows.push({
-        key: `${topic.id}-${index}`,
-        title: topic.title,
-        skill,
-        chip: overdue ? 'overdue' : index === 0 ? 'next' : ordinal(index + 1),
-        committed: index === 0,
-        overdue,
-      });
+  for (const o of occurrences(doc, day, until, { skill: skillFilter, projected }, project)) {
+    const key = bucketOf(o.day, horizon);
+    let g = groups.get(key);
+    if (!g) {
+      g = { key, items: [], committed: 0, bySkill: [], overCapacity: 0 };
+      groups.set(key, g);
     }
+    g.items.push(o);
+    if (o.committed) {
+      g.committed += 1;
+      perDay.set(o.day, (perDay.get(o.day) ?? 0) + 1);
+    }
+    let tally = g.bySkill.find((x) => x.skill.id === o.skill.id);
+    if (!tally) {
+      tally = { skill: o.skill, total: 0, committed: 0 };
+      g.bySkill.push(tally);
+    }
+    tally.total += 1;
+    if (o.committed) tally.committed += 1;
   }
 
-  return [...groups.values()]
-    .sort((a, b) => (a.key < b.key ? -1 : 1))
-    .map((g) => ({ ...g, count: `${g.rows.length} due` }));
+  const capacity = doc.settings.daily_capacity;
+  for (const [d, n] of perDay) {
+    if (n > capacity) groups.get(bucketOf(d, horizon))!.overCapacity += 1;
+  }
+  // A fixed order, the skills' own, so a skill sits in the same row of every
+  // month and can be followed down the page.
+  for (const g of groups.values()) g.bySkill.sort((a, b) => a.skill.hue_index - b.skill.hue_index);
+  return [...groups.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
+}
+
+export type DayLoad = { day: Day; committed: number; projected: number };
+
+/** Reviews per day for the next `days` days — the strip at the top of Upcoming. */
+export function dailyLoad(doc: Doc, day: Day, days: number, skillFilter: string | null, project: Projector): DayLoad[] {
+  const out: DayLoad[] = Array.from({ length: days }, (_, i) => ({ day: addDays(day, i), committed: 0, projected: 0 }));
+  const index = new Map(out.map((d, i) => [d.day, i]));
+  for (const o of occurrences(doc, day, addDays(day, days - 1), { skill: skillFilter }, project)) {
+    const at = index.get(o.day);
+    if (at === undefined) continue;
+    if (o.committed) out[at].committed += 1;
+    else out[at].projected += 1;
+  }
+  return out;
 }
 
 export function badgeFor(skill: Skill): string {

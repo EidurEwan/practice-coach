@@ -6,6 +6,7 @@ export type AuthStep = 'welcome' | 'create' | 'verify' | 'forgot' | 'done';
 export type Route =
   | { name: 'today' }
   | { name: 'upcoming' }
+  | { name: 'progress' }
   | { name: 'skills' }
   | { name: 'log' }
   | { name: 'settings' }
@@ -16,7 +17,7 @@ export type Route =
 
 export type RouteName = Route['name'];
 
-export const TABS: RouteName[] = ['today', 'upcoming', 'skills'];
+export const TABS: RouteName[] = ['today', 'upcoming', 'progress', 'skills'];
 
 /** The floating bar is hidden wherever the screen owns the whole viewport. */
 export function showsTabs(route: Route): boolean {
